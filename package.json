@@ -1,0 +1,16 @@
+{
+  "name": "watchtower-engine",
+  "version": "0.1.0",
+  "description": "Scans a repository and scores it against the Agentic Compatibility Benchmark. Headless: never compiles or runs the code it measures.",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "js-yaml": "4.1.0"
+  },
+  "scripts": {
+    "test": "node --test tests/benchmark/*.test.js"
+  }
+}

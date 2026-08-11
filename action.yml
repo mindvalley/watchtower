@@ -1,0 +1,97 @@
+name: Watchtower Engine
+description: >-
+  Installs the Agentic Compatibility Benchmark scanning engine and the exact
+  scanner versions it is calibrated against. Scans a repository without ever
+  compiling or running the code it measures.
+
+# WHY THIS IS AN ACTION AND NOT A PACKAGE
+#
+# The engine is Node code, but the numbers it produces depend just as much on
+# the six outside scanners as on the code. A package would carry the code and
+# leave every caller to pin six tools by hand — and a caller one version behind
+# on any of them reports scores that look comparable and are not. Bundling the
+# code and the pins as one versioned unit is the whole point: every org that
+# uses @<same-tag> measures with the same ruler.
+#
+# Change a pin and you have changed the measurement. Treat a pin bump as a
+# scoring change: re-scan everything and compare, don't assume it is inert.
+
+inputs:
+  node-version:
+    description: Node version used to run the engine.
+    required: false
+    default: "20"
+  elixir-version:
+    description: >-
+      Elixir, for Credo (complexity on Elixir repos) and the two AST helpers
+      the C2 reader still uses. Required today even for non-Elixir targets.
+    required: false
+    default: "1.18"
+  otp-version:
+    description: Erlang/OTP, required by the Elixir toolchain.
+    required: false
+    default: "27"
+  ruby-version:
+    description: Ruby, for Rubocop (complexity on Ruby repos).
+    required: false
+    default: "3.3"
+
+outputs:
+  engine-path:
+    description: >-
+      Absolute path to the engine. Scan programs live at
+      <engine-path>/scripts/benchmark/scan-*.js
+    value: ${{ github.action_path }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v5
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    # The engine declares exactly one dependency (js-yaml, used by the OpenAPI
+    # reader). Installing into the action's own directory keeps it off the
+    # caller's dependency tree entirely.
+    - name: Install engine dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm install --no-audit --no-fund
+
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: ${{ inputs.otp-version }}
+        elixir-version: ${{ inputs.elixir-version }}
+
+    - uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: ${{ inputs.ruby-version }}
+
+    - name: Install pinned scanners
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Install to a runner-writable dir — /usr/local/bin needs sudo on
+        # ubuntu-24.04 images. $HOME/.local/bin is put on PATH below.
+        mkdir -p "$HOME/.local/bin"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+        # Secrets. Direct tarball, not install.sh: the installer silently 404s
+        # once a release is purged, which leaves you with no scanner and a
+        # successful-looking step.
+        curl -fsSL https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz \
+          | tar -xz -C "$HOME/.local/bin" gitleaks
+
+        # Dependency CVEs.
+        TRIVY_VERSION=0.72.0
+        curl -fsSL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
+          | tar -xz -C "$HOME/.local/bin" trivy
+
+        # Static analysis.
+        pipx install semgrep==1.78.0
+        # Cyclomatic complexity for everything that is not Elixir or Ruby.
+        pipx install lizard==1.23.0
+        # Code graph for domain boundaries. Deterministic and fully offline.
+        pipx install graphifyy==0.9.28
+        # Complexity on Ruby. jscpd (duplication) is fetched on demand via npx.
+        gem install rubocop --no-document
