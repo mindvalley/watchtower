@@ -1,2 +1,88 @@
-# watchtower-engine
-Core engine and toolset for Agent Watchtower — open-sourced to separate the shared scanning engine from security-sensitive private scan scripts.
+# Watchtower Engine
+
+Scans a repository and scores it against the Agentic Compatibility Benchmark —
+how safely an AI agent can work in a codebase.
+
+**Headless by design.** The engine never compiles, installs, or runs the code it
+measures. It reads source, manifests, configuration and git history on a shallow
+clone. That is what lets it score a repository it knows nothing about.
+
+## What it measures
+
+Seven criteria, each scored out of 5 and coloured red / amber / green:
+
+| # | Criterion | Measured by |
+|---|---|---|
+| 1 | Clear Domain Boundaries | tree-sitter code graph (cycles, fan-out) + change coupling from git history |
+| 2 | Documented APIs | description coverage over OpenAPI, GraphQL SDL, and in-code API declarations |
+| 4 | Observable State | logging, tracing and error-tracking, scored declared → configured → exercised |
+| 6 | Test Coverage | test-to-source breadth + whether CI enforces a coverage floor |
+| 7 | Deployment Safety | DORA capabilities visible in the repo: progressive delivery, rollback, pipeline safety, independent deployability |
+| 8 | Codebase Simplicity | cyclomatic complexity density + whether a complexity gate is enforced, and duplication |
+| 9 | Security Posture | secrets, dependency CVEs, static analysis — each triaged before it is scored |
+
+Numbering is not contiguous: two criteria from the original spec were removed.
+
+## Scoring principles
+
+- **Convention-anchored.** A criterion is scored only against a published
+  standard or tool default — McCabe ≤ 10, DORA, Google's coverage tiers. Never
+  an arbitrary number. Where this benchmark chose a convention of its own, it
+  says so.
+- **Never falsely green.** A scanner that cannot run fails the scan; it does not
+  report a clean subject. A measurement that cannot be trusted is withheld and
+  labelled, not estimated.
+- **Language-agnostic first.** Scoring never takes language as an input.
+  Language enters only as a lookup for which files are manifests, source, or
+  tests. Language-specific parsers raise fidelity; they are never a prerequisite.
+
+## Using it
+
+The engine ships as a composite action so that the code and the scanner versions
+it is calibrated against travel as one unit. A caller one version behind on any
+scanner produces numbers that look comparable and are not.
+
+```yaml
+- uses: mindvalley/watchtower-engine@v0
+  id: engine
+
+- run: node "${{ steps.engine.outputs.engine-path }}/scripts/benchmark/scan-security.js"
+  env:
+    SYSTEM: my-service
+    GH_TOKEN: ${{ steps.token.outputs.token }}
+    WATCHTOWER_CONFIG: config/systems.json
+    WATCHTOWER_REPORTS: reports
+```
+
+### Configuration
+
+The caller says what to measure; the engine says how. Three locations come from
+the environment:
+
+| Variable | Holds | Default |
+|---|---|---|
+| `WATCHTOWER_CONFIG` | the list of systems to scan and where each one lives | `config/systems.json` |
+| `WATCHTOWER_REPORTS` | where raw scanner output is written | `reports` |
+| `WATCHTOWER_DATA` | where assembled scores are read from and written to | `data` |
+
+A missing, malformed, or **empty** system list stops the run. A scan of nothing
+reports no findings, which reads exactly like a clean result.
+
+Credentials in the config file are refused outright — it is the one file that
+gets committed.
+
+## Development
+
+```bash
+npm install
+npm test
+```
+
+The suite runs offline and needs nothing but Node and `js-yaml`. Two tests
+exercise Elixir AST helpers and are skipped when Elixir is absent.
+
+## Status
+
+Used in production by Mindvalley across three organisations. Open-sourcing
+properly — setup guide, configurable triage filters, dropping the Elixir
+prerequisite — is intended but not yet done.

@@ -1,0 +1,23 @@
+{
+  "_comment": "C9 scanner triage config. Signal-to-noise filters applied to raw scanner output before scoring. Raw + triaged counts are both preserved for the dashboard audit trail. GOVERNANCE: any change to these filters/tools MUST be reflected in the C9 entry of the criteria documentation in the same change.",
+  "_exclude_paths_note": "Shared path allowlist applied to every file-scanning tool (gitleaks + semgrep) — test/fixture/mock/seed/cassette noise trips both. priv/static is intentionally NOT excluded (real committed keys surface there).",
+  "exclude_paths": [
+    "**/test/**",
+    "**/tests/**",
+    "**/spec/**",
+    "**/__mocks__/**",
+    "**/fixtures/**",
+    "**/priv/data/seed/**",
+    "**/cassette_library/**",
+    "**/config/test.exs"
+  ],
+  "_gitleaks_review_rules_note": "Low-precision gitleaks rules whose hits go to a REVIEW bucket (surfaced, but do NOT hard-cap): they match public IDs / GA tags / UUIDs as often as real secrets. High-precision rules (private keys, provider tokens) still hard-cap.",
+  "gitleaks_review_rules": [
+    "generic-api-key"
+  ],
+  "_semgrep_remap_note": "Keyed by check_id leaf (--config auto emits <path>.<leaf>.<leaf>). Demotes CI/workflow hardening recommendations that are not code vulnerabilities.",
+  "semgrep_severity_remap": {
+    "github-actions-mutable-action-tag": "INFO",
+    "secrets-inherit": "INFO"
+  }
+}
