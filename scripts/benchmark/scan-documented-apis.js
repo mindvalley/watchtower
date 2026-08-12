@@ -169,8 +169,17 @@ function main() {
   } else { // 'artifact'
     report = scanArtifacts(repoDir);
     if (!report) {
-      console.log(`C2 ${SYSTEM} (${cfg.repo}, stack=${cfg.stack}) — no committed API artifact, skipping (-> Pending)`);
-      return;
+      // No committed API artifact to read. That is a real answer — the scan ran
+      // and there was nothing to measure — and it used to be recorded by writing
+      // nothing at all, which made it indistinguishable from the scan dying
+      // before it wrote anything. Downstream, both look like an absent report.
+      //
+      // A report with no records scores exactly as an absent one did (zero total
+      // is Pending, never a full-marks zero-over-zero), so nothing about the
+      // score changes. What changes is that a missing file now means failure
+      // again, which is the only thing that lets anything upstream check.
+      report = buildReport({ applicable: true, records: [], filesParsed: 0 });
+      console.log(`C2 ${SYSTEM} (${cfg.repo}, stack=${cfg.stack}) — no committed API artifact (-> Pending)`);
     }
   }
 
