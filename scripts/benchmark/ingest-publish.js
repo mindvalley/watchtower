@@ -1,22 +1,22 @@
 'use strict';
 
 /*
- * Posts freshly-scanned systems to the Watchtower's /ingest endpoint.
+ * Posts scored systems to a Watchtower's /ingest endpoint.
  *
- * Runs in the build job, after refresh-benchmark-data.js has rebuilt
- * public/data from this run's reports — which is why it can reuse the payload
- * builder unchanged: by that point the committed-file shape and the fresh scan
- * output are the same thing.
+ * Runs after the assemble step, which is what makes it able to reuse the
+ * payload builder unchanged: by that point the stored shape and this run's
+ * fresh output are the same thing.
  *
- * Publishing does NOT replace the data PR. The PR keeps a reviewable record and
- * a current bootstrap copy for a fresh database; ingest makes the scores land
- * without waiting for a merge, and makes this run exercise the same path the
- * tenant watchtowers use.
+ * Publishing need not replace a data PR where one exists. A PR keeps a
+ * reviewable record and a bootstrap copy for an empty database; ingest makes
+ * the scores land without waiting for a merge. A watchtower with no dashboard
+ * repo of its own has only this path.
  *
  * Env:
- *   WATCHTOWER_URL  base URL of the deployed service
- *   IAP_ID_TOKEN    Google ID token for the IAP perimeter (Authorization)
+ *   WATCHTOWER_URL  base URL of the receiving service
+ *   IAP_ID_TOKEN    Google ID token for the perimeter (Authorization)
  *   INGEST_TOKEN    GitHub Actions OIDC token (X-Benchmark-Ingest-Token)
+ *   plus WATCHTOWER_CONFIG / WATCHTOWER_REPORTS / WATCHTOWER_DATA
  */
 
 const fs = require('fs');
@@ -25,19 +25,30 @@ const { buildIngestPayload } = require('./build-ingest-payload');
 
 // Two conditions, both required.
 //
-// The system must have declared publish:"ingest" — absent means it publishes by
-// data PR, which is the default and stays the default.
+// FIRST: this run must have assembled the system. That comes from the run
+// manifest, never from the config — the config is the set a watchtower is
+// responsible for, which can be wider than the set a given run measured.
+// Posting the difference republishes older numbers under a fresh date, so the
+// board reads as freshly measured when nothing measured it.
 //
-// And this run must have actually scanned it. A scan_mode:"local" system is not
-// in the CI matrix; the build job preserves its committed entry instead of
-// rebuilding it. Posting that would republish an earlier scan's numbers stamped
-// as this run's, which is worse than not publishing at all — the board would
-// look freshly measured when nothing had measured it.
-function systemsToPublish(overrides) {
-  const systems = (overrides && overrides.systems) || {};
-  return Object.entries(systems)
-    .filter(([, cfg]) => cfg && cfg.publish === 'ingest' && cfg.scan_mode !== 'local')
-    .map(([key]) => key)
+// SECOND: the system's results must be destined for a database rather than a
+// file. A watchtower scanning on someone's behalf declares that once, at the
+// top of its config; a board that publishes some systems one way and some
+// another says so per system, and the per-system answer wins. Absent both, the
+// scores are written out and go nowhere on their own, which is the right
+// default for a run with no endpoint to talk to.
+function systemsToPublish(config, manifest) {
+  const systems = (config && config.systems) || {};
+  const fallback = config && config.publish;
+  const assembled = (manifest && manifest.systems) || [];
+
+  return assembled
+    .filter((key) => {
+      const cfg = systems[key];
+      if (!cfg) return false;
+      return (cfg.publish || fallback) === 'ingest';
+    })
+    .slice()
     .sort();
 }
 
@@ -45,17 +56,18 @@ module.exports = { systemsToPublish };
 
 // --- I/O edge -------------------------------------------------------------
 if (require.main === module) {
-  const DATA_DIR = require('./engine-config').dataDir();
+  const { dataDir, reportsRoot, loadConfig } = require('./engine-config');
+  const { readManifest } = require('./run-manifest');
+  const DATA_DIR = dataDir();
   const read = (f) => JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), 'utf8'));
 
   const { WATCHTOWER_URL, IAP_ID_TOKEN, INGEST_TOKEN } = process.env;
 
   async function main() {
-    const overrides = read('benchmark.overrides.json');
-    const keys = systemsToPublish(overrides);
+    const keys = systemsToPublish(loadConfig(), readManifest(reportsRoot()));
 
     if (keys.length === 0) {
-      console.log('No system publishes by ingest yet — nothing to post.');
+      console.log('Nothing this run assembled publishes to a database — nothing to post.');
       return;
     }
 
