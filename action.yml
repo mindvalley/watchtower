@@ -41,11 +41,32 @@ outputs:
     description: >-
       Absolute path to the engine. Scan programs live at
       <engine-path>/scripts/benchmark/scan-*.js
-    value: ${{ github.action_path }}
+    # Handed out by the first step below rather than read directly here.
+    # github.action_path does not resolve in this block — it exists only inside
+    # the action's own steps — so this was an empty string for every caller.
+    value: ${{ steps.locate.outputs.engine-path }}
 
 runs:
   using: composite
   steps:
+    # First, so a broken handover costs a second rather than the two minutes it
+    # takes to install six scanners.
+    #
+    # An empty path is not a visible failure by itself: the caller joins it to a
+    # filename and node reports a missing module at /scripts/benchmark/..., which
+    # reads like a broken engine rather than a broken handover. This says where
+    # the engine is only after checking something is there.
+    - name: Locate the engine
+      id: locate
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ ! -f "${GITHUB_ACTION_PATH}/scripts/benchmark/scan-security.js" ]; then
+          echo "The engine is not where this action is: ${GITHUB_ACTION_PATH}" >&2
+          exit 1
+        fi
+        echo "engine-path=${GITHUB_ACTION_PATH}" >> "$GITHUB_OUTPUT"
+
     - uses: actions/setup-node@v5
       with:
         node-version: ${{ inputs.node-version }}
