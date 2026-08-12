@@ -17,11 +17,28 @@ function fixture(files) {
   return dir;
 }
 
-test('scanArtifacts: no artifact -> null (Pending, no report)', () => {
+test('scanArtifacts: no artifact -> null', () => {
   const dir = fixture({ 'README.md': '# nothing here' });
   const r = scanArtifacts(dir);
   fs.rmSync(dir, { recursive: true, force: true });
   assert.strictEqual(r, null);
+});
+
+test('a repo with no API artifact still gets a report, and it scores Pending', () => {
+  // The edge used to write nothing here, so "the scan looked and there is no
+  // API to describe" and "the scan died before writing" were the same absence
+  // to everything downstream. Anything trying to tell a dead leg from a clean
+  // one had no way to.
+  //
+  // The two conditions that make writing one safe, both pinned here: an empty
+  // report scores Pending, and Pending is what an absent report scored, so no
+  // system's number moves. The failure this guards against is the opposite —
+  // zero described out of zero total arriving as full marks.
+  const { buildReport } = require('../../scripts/benchmark/documented-apis-signals');
+  const report = buildReport({ applicable: true, records: [], filesParsed: 0 });
+
+  assert.strictEqual(report.total, 0);
+  assert.strictEqual(scoreDocumentedApis(report, { assessedAt: '2026-01-01' }), null);
 });
 
 test('scanArtifacts: committed OpenAPI -> rest records; scores', () => {
