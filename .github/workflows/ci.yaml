@@ -1,0 +1,35 @@
+name: Tests
+
+# The engine had no CI. Its tests existed, and an `npm test` script ran them,
+# but nothing ran that script on a change — they were only ever executed inside
+# the private repository the engine grew up in. So the moment that repository
+# stopped keeping a copy of the engine, the tests for the code three
+# organisations score themselves with would have run nowhere at all.
+#
+# Scores move when this code moves. A change here changes every board.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+
+      # js-yaml is the engine's only dependency. Installing from the lockfile so
+      # a test run cannot silently pick up a different version of the parser
+      # that reads OpenAPI files out of the repositories we scan.
+      - run: npm ci --no-audit --no-fund
+
+      - run: npm test
