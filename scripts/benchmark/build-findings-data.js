@@ -9,26 +9,10 @@
 const {
   parseGitleaks, parseTrivy, parseSast, parseDuplication, complexityParser,
 } = require('./parse-reports');
-
-// Third-party scanners (gitleaks/trivy/semgrep/credo/rubocop/jscpd) report paths
-// absolute to the per-run clone dir — <tmp>/scan-<sys>-<rand>/repo/ or
-// <tmp>/scan-c8-<sys>-<rand>/repo/. That random suffix would render as garbage in
-// the UI and, worse, make findings-*.json churn on every scan (defeating the
-// data-PR change gate). Strip the clone-root prefix to repo-relative. Our own
-// walkers (C4/C6/C7) already emit relative paths, which don't match and pass through.
-function relativize(s) {
-  if (typeof s !== 'string') return s;
-  return s.replace(/^.*?\/scan-[^/]*\/repo\//, '');
-}
-function relativizePaths(node) {
-  if (Array.isArray(node)) return node.map(relativizePaths);
-  if (node && typeof node === 'object') {
-    const out = {};
-    for (const [k, v] of Object.entries(node)) out[k] = relativizePaths(v);
-    return out;
-  }
-  return relativize(node);
-}
+const { createAllowanceSet } = require('./allowances');
+// Shared with the allowances matcher, which has to shorten a scanner path on the
+// way IN for the same reason this shortens it on the way out. See repo-paths.js.
+const { relativizePaths } = require('./repo-paths');
 
 const nonEmpty = (items) => (Array.isArray(items) ? items.filter(Boolean) : []);
 function group(sub, label, disposition, items) {
@@ -41,23 +25,35 @@ function criterion(label, groups) {
   return gs.length ? { label, groups: gs } : null;
 }
 
-async function c9Groups(sys, readReport, sastTool, triageConfig) {
+async function c9Groups(sys, readReport, sastTool, triageConfig, allow) {
   const excludePaths = triageConfig.exclude_paths || [];
   const reviewRules = triageConfig.gitleaks_review_rules || [];
   const severityRemap = triageConfig.semgrep_severity_remap || {};
   const dd = (await readReport(sys.name, 'direct-deps')) || {};
-  const secrets = parseGitleaks(await readReport(sys.name, 'gitleaks'), { excludePaths, reviewRules });
-  const deps = parseTrivy(await readReport(sys.name, 'trivy'), { prodDeps: dd.prod || [], devDeps: dd.dev || [] });
-  const sast = parseSast(await readReport(sys.name, sys.sast_tool || sastTool), sys.sast_tool || sastTool, { severityRemap, excludePaths });
+  const secrets = parseGitleaks(await readReport(sys.name, 'gitleaks'), {
+    excludePaths, reviewRules, allow: allow.matcherFor('security', 'secrets'),
+  });
+  const deps = parseTrivy(await readReport(sys.name, 'trivy'), {
+    prodDeps: dd.prod || [], devDeps: dd.dev || [], allow: allow.matcherFor('security', 'deps'),
+  });
+  const sast = parseSast(await readReport(sys.name, sys.sast_tool || sastTool), sys.sast_tool || sastTool, {
+    severityRemap, excludePaths, allow: allow.matcherFor('security', 'sast'),
+  });
   return [
     group('secrets', 'Secrets', 'confirmed', (secrets.items || []).map((s) => ({ file: s.file, rule: s.rule }))),
     group('secrets', 'Secrets', 'review', (secrets.review_items || []).map((s) => ({ file: s.file, rule: s.rule }))),
+    // Allowed findings keep their place in the report — removed from the score,
+    // not from the record. The secrets whitelist stays as tight as the confirmed
+    // one: file and rule only, never a matched value.
+    group('secrets', 'Secrets', 'allowed', (secrets.allowed_items || []).map((s) => ({ file: s.file, rule: s.rule, allowed_reason: s.allowed_reason }))),
     group('deps', 'Dependency CVEs', null, deps.items),
+    group('deps', 'Dependency CVEs', 'allowed', deps.allowed_items),
     group('sast', 'SAST', null, sast.items),
+    group('sast', 'SAST', 'allowed', sast.allowed_items),
   ];
 }
 
-async function c8Groups(sys, readReport) {
+async function c8Groups(sys, readReport, allow) {
   const meta = await readReport(sys.name, 'simplicity-meta');
   if (!meta) return [];
   const entries = Array.isArray(meta.languages) && meta.languages.length
@@ -66,7 +62,20 @@ async function c8Groups(sys, readReport) {
   if (!entries.length) return [];
 
   const offsets = (await readReport(sys.name, 'vue-offsets')) || {};
+  // Map an extracted Vue script location back to its .vue file and original
+  // line. A location pointing at the extraction tree is unactionable.
+  // Use longest-match so that two offset keys sharing a suffix (e.g.
+  // "src/Login.vue.ts" and "components/src/Login.vue.ts") never collide.
+  const toSource = (it, language) => {
+    const matches = it.file ? Object.entries(offsets).filter(([k]) => it.file.endsWith(k)) : [];
+    const hit = matches.length ? matches.reduce((a, b) => (a[0].length >= b[0].length ? a : b)) : null;
+    if (!hit) return { ...it, language };
+    const [, { source, lineOffset }] = hit;
+    return { ...it, file: source, line: it.line != null ? (it.line - 1) + lineOffset : it.line, language };
+  };
+
   const items = [];
+  const allowedItems = [];
   for (const entry of entries) {
     const reportName = entry.report || entry.tool;
     const raw = await readReport(sys.name, reportName);
@@ -76,25 +85,20 @@ async function c8Groups(sys, readReport) {
     if (raw == null) {
       throw new Error(`C8 ${sys.name}: simplicity-meta names report '${reportName}' for ${entry.language}, but it is missing — refusing to emit findings with that language silently absent`);
     }
-    const cx = complexityParser(entry.tool)(raw);
-    for (const it of (cx.items || [])) {
-      // Map an extracted Vue script location back to its .vue file and original
-      // line. A location pointing at the extraction tree is unactionable.
-      // Use longest-match so that two offset keys sharing a suffix (e.g.
-      // "src/Login.vue.ts" and "components/src/Login.vue.ts") never collide.
-      const matches = it.file ? Object.entries(offsets).filter(([k]) => it.file.endsWith(k)) : [];
-      const hit = matches.length ? matches.reduce((a, b) => a[0].length >= b[0].length ? a : b) : null;
-      if (hit) {
-        const [, { source, lineOffset }] = hit;
-        items.push({ ...it, file: source, line: it.line != null ? (it.line - 1) + lineOffset : it.line, language: entry.language });
-      } else {
-        items.push({ ...it, language: entry.language });
-      }
-    }
+    const cx = complexityParser(entry.tool)(raw, { allow: allow.matcherFor('simplicity', 'complexity') });
+    // Allowed items get the same Vue remap as the rest. They are shown to the
+    // same reader, so a location that is unactionable for one is unactionable
+    // for the other.
+    for (const it of (cx.items || [])) items.push(toSource(it, entry.language));
+    for (const it of (cx.allowed_items || [])) allowedItems.push(toSource(it, entry.language));
   }
   const dup = parseDuplication(await readReport(sys.name, 'jscpd'));
   return [
     group('complexity', 'Cyclomatic complexity', null, items),
+    group('complexity', 'Cyclomatic complexity', 'allowed', allowedItems),
+    // Duplication carries no allowed group: its percentage comes from jscpd's own
+    // totals rather than this list, so filtering here would show findings removed
+    // while the score stayed put. See allowances.js.
     group('duplication', 'Duplication', null, dup.clone_items),
   ];
 }
@@ -167,16 +171,36 @@ async function c2Groups(sys, readReport) {
   return groups;
 }
 
-async function buildFindingsForSystem({ sys, readReport, sastTool, triageConfig = {}, generatedAt }) {
+async function buildFindingsForSystem({
+  sys, readReport, sastTool, triageConfig = {}, allowances = [], generatedAt,
+}) {
+  const allow = createAllowanceSet(allowances, sys.name);
   const criteria = {};
   const add = (key, label, groups) => { const c = criterion(label, groups); if (c) criteria[key] = c; };
   add('2', 'Documented APIs', await c2Groups(sys, readReport));
   add('4', 'Observable State', await c4Groups(sys, readReport));
   add('6', 'Test Coverage', await c6Groups(sys, readReport));
   add('7', 'Deployment Safety', await c7Groups(sys, readReport));
-  add('8', 'Codebase Simplicity', await c8Groups(sys, readReport));
-  add('9', 'Security Posture', await c9Groups(sys, readReport, sastTool, triageConfig));
-  return { system: sys.name, generated_at: generatedAt, criteria: relativizePaths(criteria) };
+  add('8', 'Codebase Simplicity', await c8Groups(sys, readReport, allow));
+  add('9', 'Security Posture', await c9Groups(sys, readReport, sastTool, triageConfig, allow));
+
+  // Every allowance in scope for this system with the number of findings it
+  // absorbed — including the zeros, which are the ones worth reading. An entry
+  // at zero is either fixed (delete it) or never matched anything and was wrong
+  // when it was written; without this it is indistinguishable from an entry
+  // quietly doing its job.
+  //
+  // Sits OUTSIDE `criteria` deliberately: buildIngestPayload publishes
+  // `findings.criteria` and nothing else, so a watchtower's list of judgements
+  // stays in its own repo and never travels to the shared database.
+  const allowanceSummary = allow.summary();
+  const envelope = {
+    system: sys.name,
+    generated_at: generatedAt,
+    criteria: relativizePaths(criteria),
+  };
+  if (allowanceSummary.length) envelope.allowances = allowanceSummary;
+  return envelope;
 }
 
 module.exports = { buildFindingsForSystem };

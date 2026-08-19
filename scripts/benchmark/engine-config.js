@@ -18,9 +18,16 @@
 //   WATCHTOWER_DATA     folder holding the assembled scores, which the publish
 //                       step reads back to send to a dashboard
 //                       (default: ./data)
+//   WATCHTOWER_ALLOWANCES
+//                       path to the file listing findings already judged
+//                       acceptable (default: ./watchtower.allowances.json).
+//                       Unlike the others, ABSENCE IS NORMAL — most watchtowers
+//                       allow nothing, and no file behaves exactly like an empty
+//                       list. See allowances.js.
 //
 // The list itself stays private and is never part of the engine: it names real
-// repositories, which is the caller's business, not the tool's.
+// repositories, which is the caller's business, not the tool's. The same is true
+// of the allowances: the engine carries the mechanism, never anyone's judgements.
 //
 // Everything here fails loudly. A scan that cannot find its list must stop, not
 // carry on with nothing to scan — an empty run reports no problems, which reads
@@ -30,13 +37,19 @@
 
 const fs = require('fs');
 const path = require('path');
+const { parseAllowances } = require('./allowances');
 
 const DEFAULT_CONFIG = 'watchtower.config.json';
 const DEFAULT_REPORTS = 'reports';
 const DEFAULT_DATA = 'data';
+const DEFAULT_ALLOWANCES = 'watchtower.allowances.json';
 
 function configPath() {
   return path.resolve(process.env.WATCHTOWER_CONFIG || DEFAULT_CONFIG);
+}
+
+function allowancesPath() {
+  return path.resolve(process.env.WATCHTOWER_ALLOWANCES || DEFAULT_ALLOWANCES);
 }
 
 function reportsRoot() {
@@ -83,6 +96,43 @@ function loadConfig() {
   return parsed;
 }
 
+// The allowances file, parsed and validated. Read lazily for the same reason as
+// the config.
+//
+// Absence is handled asymmetrically on purpose:
+//
+//   no WATCHTOWER_ALLOWANCES set, default file not there
+//       -> [] . Allowing nothing is the ordinary state of a watchtower, and this
+//          is the case that makes shipping the mechanism provably score-neutral.
+//   WATCHTOWER_ALLOWANCES set, file not there
+//       -> throw. The caller said where the list is; if it is not there, a typo
+//          in the path would otherwise swallow every allowance in silence and
+//          look exactly like a list that legitimately matches nothing.
+function loadAllowances() {
+  const file = allowancesPath();
+  const explicit = Boolean(process.env.WATCHTOWER_ALLOWANCES);
+
+  let raw;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT' && !explicit) return [];
+    throw new Error(
+      `Cannot read the allowances file at ${file}. ` +
+      `WATCHTOWER_ALLOWANCES points here, so an unreadable file is an error, not an empty list. (${err.code})`,
+    );
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(`The allowances file at ${file} is not valid JSON: ${err.message}`);
+  }
+
+  return parseAllowances(parsed, { source: file });
+}
+
 // Credentials are supplied through the environment, never through this file.
 // The config is the one thing that gets committed to a repository.
 const CREDENTIAL_LOOKING = /^(token|password|secret|key|private_key|credential)$/i;
@@ -118,4 +168,7 @@ function reportsDir(systemKey) {
   return dir;
 }
 
-module.exports = { configPath, reportsRoot, dataDir, loadConfig, systemConfig, reportsDir };
+module.exports = {
+  configPath, reportsRoot, dataDir, allowancesPath,
+  loadConfig, loadAllowances, systemConfig, reportsDir,
+};
