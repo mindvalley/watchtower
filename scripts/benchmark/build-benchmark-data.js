@@ -16,12 +16,13 @@ const { scoreTestCoverage } = require('./score-test-coverage');
 const { scoreBoundaries } = require('./score-boundaries');
 const { boundaryGraphDisposition } = require('./criterion-stacks');
 const { buildSystemEntry, assembleBenchmark } = require('./assemble-benchmark');
+const { createAllowanceSet } = require('./allowances');
 
 // Score C8 only when the simplicity scan actually ran for this system (its meta
 // file is present). Otherwise return null so C8 stays Pending — never score an
 // un-scanned system a false green (the same trap C9's CI "assert reports" guard
 // closes on the pipeline side).
-async function scoreC8({ sys, readReport, assessedAt }) {
+async function scoreC8({ sys, readReport, assessedAt, allowComplexity = null }) {
   const meta = await readReport(sys.name, 'simplicity-meta');
   if (!meta) return null;
 
@@ -33,6 +34,7 @@ async function scoreC8({ sys, readReport, assessedAt }) {
     : [{ language: meta.stack, tool: meta.tool, report: meta.tool, loc: meta.loc, gate: null }];
 
   let violations = 0;
+  let allowed = 0;
   const items = [];
   const perLanguage = [];
   for (const entry of entries) {
@@ -46,8 +48,9 @@ async function scoreC8({ sys, readReport, assessedAt }) {
     if (raw == null) {
       throw new Error(`C8 ${sys.name}: simplicity-meta names report '${reportName}' for ${entry.language}, but it is missing — refusing to score ${entry.loc || 0} lines as zero violations`);
     }
-    const cx = complexityParser(entry.tool)(raw); // throws on an unknown tool
+    const cx = complexityParser(entry.tool)(raw, { allow: allowComplexity }); // throws on an unknown tool
     violations += cx.violations;
+    allowed += cx.allowed || 0;
     for (const it of (cx.items || [])) items.push({ ...it, language: entry.language });
     perLanguage.push({
       language: entry.language, tool: entry.tool, loc: entry.loc || 0, violations: cx.violations,
@@ -59,7 +62,7 @@ async function scoreC8({ sys, readReport, assessedAt }) {
   const gates = entries.filter((e) => e.gate).map((e) => ({ language: e.language, loc: e.loc || 0, ...e.gate }));
   const dup = parseDuplication(await readReport(sys.name, 'jscpd'));
   return scoreSimplicity({
-    complexity: { violations, loc: meta.loc || 0 },
+    complexity: { violations, loc: meta.loc || 0, allowed },
     duplication: dup,
     tool: meta.tool,
     gates,
@@ -116,8 +119,12 @@ async function scoreC1({ sys, readReport, assessedAt }) {
   });
 }
 
+// `allowances` is the watchtower's list of findings already judged acceptable.
+// It defaults to empty, and an empty list takes every parser down the path it
+// took before this existed — which is what makes shipping the mechanism provably
+// unable to move a score.
 async function buildBenchmarkData({
-  systems, readReport, sastTool, assessedAt, lastUpdated, triageConfig = {},
+  systems, readReport, sastTool, assessedAt, lastUpdated, triageConfig = {}, allowances = [],
 }) {
   const excludePaths = triageConfig.exclude_paths || [];
   const reviewRules = triageConfig.gitleaks_review_rules || [];
@@ -129,13 +136,25 @@ async function buildBenchmarkData({
     const prodDeps = (directDeps && directDeps.prod) || [];
     const devDeps = (directDeps && directDeps.dev) || [];
 
-    const secrets = parseGitleaks(await readReport(sys.name, 'gitleaks'), { excludePaths, reviewRules });
-    const deps = parseTrivy(await readReport(sys.name, 'trivy'), { prodDeps, devDeps });
-    const sast = parseSast(await readReport(sys.name, tool), tool, { severityRemap, excludePaths });
+    // Per system: an allowance may be scoped to one system, and an entry that
+    // matched nothing here may have matched plenty on the next one.
+    const allow = createAllowanceSet(allowances, sys.name);
+
+    const secrets = parseGitleaks(await readReport(sys.name, 'gitleaks'), {
+      excludePaths, reviewRules, allow: allow.matcherFor('security', 'secrets'),
+    });
+    const deps = parseTrivy(await readReport(sys.name, 'trivy'), {
+      prodDeps, devDeps, allow: allow.matcherFor('security', 'deps'),
+    });
+    const sast = parseSast(await readReport(sys.name, tool), tool, {
+      severityRemap, excludePaths, allow: allow.matcherFor('security', 'sast'),
+    });
     const c9 = scoreSecurity({ secrets, deps, sast, assessedAt });
 
     const criteria = { 9: c9 };
-    const c8 = await scoreC8({ sys, readReport, assessedAt });
+    const c8 = await scoreC8({
+      sys, readReport, assessedAt, allowComplexity: allow.matcherFor('simplicity', 'complexity'),
+    });
     if (c8) criteria[8] = c8;
 
     const c4 = await scoreC4({ sys, readReport, assessedAt });

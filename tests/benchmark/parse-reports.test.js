@@ -19,6 +19,7 @@ test('parseGitleaks treats null / non-array as zero', () => {
   const zero = {
     secrets: 0, raw_secrets: 0, triaged_secrets: 0, confirmed_secrets: 0,
     review_secrets: 0, excluded_by_path: 0, items: [], review_items: [],
+    allowed: 0, allowed_items: [],
   };
   assert.deepStrictEqual(parseGitleaks(null), zero);
   assert.deepStrictEqual(parseGitleaks({ nope: 1 }), zero);

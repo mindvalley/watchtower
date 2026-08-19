@@ -61,12 +61,16 @@ function toolAttribution(languages, fallbackTool) {
 }
 
 function complexityFinding({
-  violations, loc, tool, languages,
+  violations, loc, tool, languages, allowed = 0,
 }) {
   const { tools, byTool } = toolAttribution(languages, tool);
   const toolList = tools.length ? tools.join(' + ') : tool;
+  // Stated in both branches. "No functions exceed 10" while three were allowed is
+  // a materially different claim from the same sentence with nothing allowed, and
+  // the zero case is exactly where a reader is least likely to go looking.
+  const note = allowed > 0 ? ` · ${allowed} allowed` : '';
   if (violations === 0) {
-    return `No functions exceed cyclomatic complexity 10 (${toolList}) across ${loc.toLocaleString()} lines`;
+    return `No functions exceed cyclomatic complexity 10 (${toolList}) across ${loc.toLocaleString()} lines${note}`;
   }
   const density = round1(violations / (Math.max(loc, 1) / 1000));
   // With more than one tool, say which one found what — otherwise the credit (or
@@ -74,7 +78,7 @@ function complexityFinding({
   const breakdown = byTool.length > 1
     ? ` — ${byTool.filter((t) => t.violations > 0).map((t) => `${t.violations} by ${t.tool} (${t.languages.join(', ')})`).join(', ')}`
     : ` (${toolList})`;
-  return `${violations} function(s) over cyclomatic complexity 10${breakdown} — ${density} per 1k lines`;
+  return `${violations} function(s) over cyclomatic complexity 10${breakdown} — ${density} per 1k lines${note}`;
 }
 
 function duplicationFinding({ percentage, duplicated_lines, total_lines }) {
@@ -211,6 +215,7 @@ function scoreSimplicity({
       threshold: 10,
       violations: complexity.violations || 0,
       loc: complexity.loc || 0,
+      allowed: complexity.allowed || 0,
     },
     duplication: {
       tool: 'jscpd',

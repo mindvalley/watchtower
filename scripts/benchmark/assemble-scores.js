@@ -25,7 +25,7 @@ const fs = require('fs');
 const path = require('path');
 const { buildBenchmarkData } = require('./build-benchmark-data');
 const { buildFindingsForSystem } = require('./build-findings-data');
-const { loadConfig, reportsRoot, dataDir } = require('./engine-config');
+const { loadConfig, loadAllowances, reportsRoot, dataDir } = require('./engine-config');
 const { writeManifest } = require('./run-manifest');
 
 // Every report the scorers expect, and the reason this list is here rather
@@ -128,20 +128,53 @@ if (require.main === module) {
       sast_tool: config.systems[name].sast_tool,
     }));
     const triageConfig = loadTriageConfig();
+    // Findings this watchtower has already judged acceptable. Absent is normal
+    // and means an empty list, which changes nothing.
+    const allowances = loadAllowances();
     const date = today();
 
     const built = await buildBenchmarkData({
-      systems, readReport, sastTool: 'semgrep', assessedAt: date, lastUpdated: date, triageConfig,
+      systems, readReport, sastTool: 'semgrep', assessedAt: date, lastUpdated: date, triageConfig, allowances,
     });
 
     fs.mkdirSync(DATA, { recursive: true });
     fs.writeFileSync(path.join(DATA, 'benchmark.json'), `${JSON.stringify(built, null, 2)}\n`);
 
+    // Totals per allowance ACROSS systems. A fleet-wide entry is reported once
+    // per system it was in scope for, so counting the zeros directly would call
+    // an entry idle when it matched on one system and not another.
+    const absorbed = new Map();
+    const entryKey = (a) => JSON.stringify([a.criterion, a.sub, a.system, a.match]);
+
     for (const sys of systems) {
       const env = await buildFindingsForSystem({
-        sys, readReport, sastTool: 'semgrep', triageConfig, generatedAt: date,
+        sys, readReport, sastTool: 'semgrep', triageConfig, allowances, generatedAt: date,
       });
       fs.writeFileSync(path.join(DATA, `findings-${sys.name}.json`), `${JSON.stringify(env, null, 2)}\n`);
+      for (const a of (env.allowances || [])) {
+        const k = entryKey(a);
+        const seen = absorbed.get(k) || { entry: a, total: 0 };
+        seen.total += a.matched;
+        absorbed.set(k, seen);
+      }
+    }
+
+    // Said out loud rather than left in a file nobody opens. An allowance that
+    // matched nothing across the whole run is either a finding since fixed —
+    // delete the entry — or one that never matched and has been suppressing
+    // nothing since the day it was written. Both are worth knowing; neither
+    // fails the run, because a stale allowance is not a reason to stop
+    // publishing scores.
+    if (absorbed.size) {
+      const idle = [...absorbed.values()].filter((a) => a.total === 0);
+      const removed = [...absorbed.values()].reduce((n, a) => n + a.total, 0);
+      console.log(
+        `Allowances: ${absorbed.size} entr(ies) in scope, ` +
+        `${absorbed.size - idle.length} active, ${removed} finding(s) removed from scoring.`,
+      );
+      for (const { entry } of idle) {
+        console.log(`  matched nothing: ${entry.criterion}/${entry.sub} ${JSON.stringify(entry.match)}${entry.system ? ` [${entry.system}]` : ''}`);
+      }
     }
 
     // Recorded before the process can exit successfully, so what gets published

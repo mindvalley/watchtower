@@ -48,6 +48,13 @@ function effectiveDeps({ prod, dev }) {
   };
 }
 
+// An allowed finding is stated alongside the count it was removed from, never
+// silently dropped: "0 secrets" and "0 secrets, 2 allowed" are different claims
+// and a reader is entitled to tell them apart.
+function allowedNote(n) {
+  return n > 0 ? `${n} allowed` : null;
+}
+
 function secretsFinding(secrets) {
   const confirmed = secrets.confirmed_secrets != null ? secrets.confirmed_secrets : secrets.secrets;
   const review = secrets.review_secrets || 0;
@@ -58,6 +65,8 @@ function secretsFinding(secrets) {
   const extras = [];
   if (review > 0) extras.push(`${review} key-like string(s) to review`);
   if (excluded > 0) extras.push(`${excluded} test/fixture match(es) excluded`);
+  const allowed = allowedNote(secrets.allowed || 0);
+  if (allowed) extras.push(allowed);
   return extras.length ? `${base} · ${extras.join(' · ')}` : base;
 }
 
@@ -68,6 +77,7 @@ function depsFinding(deps) {
     : `${parts.join(', ')} direct production dependency CVEs (trivy)`;
   if (deps.dev.total > 0) text += `; ${deps.dev.total} dev-only CVE(s) discounted`;
   if (deps.transitive.total > 0) text += `; ${deps.transitive.total} transitive CVE(s) shown for info`;
+  if (deps.allowed > 0) text += `; ${deps.allowed} allowed`;
   return text;
 }
 
@@ -77,6 +87,7 @@ function sastFinding(sast) {
     ? 'No high-severity SAST findings (semgrep)'
     : `${parts.join(', ')} SAST findings (semgrep)`;
   if (sast.remapped > 0) text += `; ${sast.remapped} supply-chain-tag finding(s) remapped to info`;
+  if (sast.allowed > 0) text += `; ${sast.allowed} allowed`;
   return text;
 }
 
@@ -99,6 +110,9 @@ function scoreSecurity({ secrets, deps, sast, assessedAt }) {
   if (eff.critical > 0 || eff.high > 0) actions.push('Upgrade or patch dependencies with Critical/High CVEs (trivy) to a fixed version.');
   if (sast.triaged.critical > 0 || sast.triaged.high > 0) actions.push('Triage and fix the high-severity SAST findings (semgrep); add the rules to CI.');
 
+  // `allowed` joins the raw -> filter -> triaged -> score trail as its own step,
+  // so the chain stays inspectable: a reader can see that a number moved because
+  // a person allowed something, not because a scanner stopped finding it.
   const audit = {
     secrets: {
       raw: secrets.raw_secrets || 0,
@@ -106,15 +120,18 @@ function scoreSecurity({ secrets, deps, sast, assessedAt }) {
       confirmed: secrets.confirmed_secrets != null ? secrets.confirmed_secrets : secrets.secrets,
       review: secrets.review_secrets || 0,
       excluded_by_path: secrets.excluded_by_path || 0,
+      allowed: secrets.allowed || 0,
     },
     deps: {
       raw: deps.raw, prod: deps.prod, dev: deps.dev, transitive: deps.transitive,
+      allowed: deps.allowed || 0,
     },
     sast: {
       raw: sast.raw,
       triaged: sast.triaged,
       remapped: sast.remapped || 0,
       excluded_by_path: sast.excluded_by_path || 0,
+      allowed: sast.allowed || 0,
     },
   };
 
