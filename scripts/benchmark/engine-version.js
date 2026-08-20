@@ -78,12 +78,26 @@ function digest() {
   return h.digest('hex').slice(0, 12);
 }
 
-// GITHUB_ACTION_REF is what the caller wrote after the @. Absent when the
-// engine runs from a clone rather than as an action, which is the honest
-// reading of a laptop run — `local`, not a version anyone can look up.
+// The ref is what the caller wrote after the @.
+//
+// WATCHTOWER_ENGINE_REF is exported by the action's locate step, and it has to
+// come from there. GITHUB_ACTION_REF exists only inside the action's own steps,
+// while the programs that record a version run as ordinary steps in the
+// caller's workflow, where it is simply absent. Reading it directly made every
+// CI run record itself as `local` — shipped, reviewed, and caught only by
+// running a real scan and looking at what it wrote.
+//
+// GITHUB_ACTION_REF is still consulted for anything invoked inside the action.
+//
+// The three-way fallback is the point. `local` is honest on a laptop and FALSE
+// in CI, so it is unreachable there; a CI run that somehow has no ref says
+// `unknown`, which is true and visible. Quietly claiming to be a laptop run is
+// the failure this removes.
 function engineVersion() {
-  const ref = process.env.GITHUB_ACTION_REF || null;
-  return `${ref || 'local'}@${digest()}`;
+  const ref = process.env.WATCHTOWER_ENGINE_REF
+    || process.env.GITHUB_ACTION_REF
+    || (process.env.GITHUB_ACTIONS === 'true' ? 'unknown' : 'local');
+  return `${ref}@${digest()}`;
 }
 
 module.exports = { engineVersion, digest, sourceFiles };

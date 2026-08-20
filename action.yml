@@ -67,6 +67,17 @@ runs:
         fi
         echo "engine-path=${GITHUB_ACTION_PATH}" >> "$GITHUB_OUTPUT"
 
+        # The ref the caller followed — `v1`, or a branch, or a SHA — exported
+        # so the rest of the job can read it.
+        #
+        # It has to be done HERE. GITHUB_ACTION_REF exists only inside this
+        # action's own steps, and the programs that record it run as ordinary
+        # steps in the caller's workflow, where it is simply absent. The first
+        # version read it directly from the publisher and every CI run recorded
+        # itself as `local`, which is the one wrong answer that matters: it says
+        # somebody's laptop when it was a scheduled scan.
+        echo "WATCHTOWER_ENGINE_REF=${{ github.action_ref }}" >> "$GITHUB_ENV"
+
     - uses: actions/setup-node@v5
       with:
         node-version: ${{ inputs.node-version }}
