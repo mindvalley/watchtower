@@ -1,0 +1,46 @@
+{
+  "_comment": [
+    "The outside tools whose versions change the numbers, and the single place",
+    "the pinned ones are written down. action.yml installs exactly these, and",
+    "engine-version.js hashes this file as part of the engine's identity.",
+    "",
+    "They live inside the engine directory rather than beside the install step",
+    "for two reasons. The versions ARE part of the measurement — change one and",
+    "you have changed the ruler, so a score's identity has to cover them. And",
+    "the engine may not read anything above its own directory, which is what",
+    "makes it extractable at all; reaching up to action.yml for these would",
+    "break that boundary rather than respect it.",
+    "",
+    "Treat a bump as a scoring change: re-scan everything and compare. Replaying",
+    "a previous run's committed reports through the new engine offline is the",
+    "cheap way to tell an inert change from a real one.",
+    "",
+    "NOT EVERYTHING HERE IS PINNED — see `floating` below, and read it before",
+    "trusting two runs to be comparable."
+  ],
+  "pinned": {
+    "gitleaks": "8.18.4",
+    "trivy": "0.72.0",
+    "semgrep": "1.78.0",
+    "lizard": "1.23.0",
+    "graphifyy": "0.9.28"
+  },
+  "_floating_comment": [
+    "Three tools that produce scores resolve at run time, so two watchtowers on",
+    "the same engine tag can measure differently on different days. This is not",
+    "a decision, it is an omission found on 2026-08-20 while making a score able",
+    "to name its own ruler — and it is the one thing the digest cannot capture,",
+    "because the version is not known until the run happens.",
+    "",
+    "Affected measurements: Ruby complexity (rubocop), Elixir complexity (credo)",
+    "and duplication on every stack (jscpd).",
+    "",
+    "Left floating deliberately for now rather than fixed in passing: choosing a",
+    "version is a scoring change and wants its own re-scan and comparison."
+  ],
+  "floating": {
+    "rubocop": "unpinned — `gem install rubocop`, resolves latest",
+    "jscpd": "unpinned — `npx --yes jscpd`, resolves latest",
+    "credo": "~> 1.7 — a range, resolves the newest 1.7.x"
+  }
+}

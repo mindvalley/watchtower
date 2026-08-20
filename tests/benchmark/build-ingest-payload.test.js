@@ -47,9 +47,22 @@ test('extracts one system and mirrors the seed’s field mapping', () => {
     colour: 'green',
     hard_capped: false,
     coverage: '2 of 7 assessed',
+    // Null when the caller does not supply one. The builder stays a pure
+    // function of its arguments and never reads the environment itself, so the
+    // two write paths cannot disagree depending on where they ran.
+    engine_version: null,
     criteria: { c8: { score: 5.0 }, c9: { score: 3.7 } },
     findings: { c9: { locations: ['lib/a.ex'] } },
   });
+});
+
+test('carries the engine version when the caller supplies one', () => {
+  // What makes a stored score able to name the ruler that produced it. A tag
+  // moves; this does not.
+  const p = buildIngestPayload({
+    benchmark: BENCHMARK, findings: FINDINGS, systemKey: 'delta', engineVersion: 'v1@abc123def456',
+  });
+  assert.strictEqual(p.engine_version, 'v1@abc123def456');
 });
 
 test('carries no other system’s data', () => {
