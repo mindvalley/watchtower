@@ -11,28 +11,53 @@ const path = require('path');
 const os = require('os');
 const { engineVersion, digest, sourceFiles } = require('../../scripts/benchmark/engine-version');
 
-test('the version names the requested ref and the engine that actually ran', () => {
-  const before = process.env.GITHUB_ACTION_REF;
+function withEnv(vars, fn) {
+  const saved = {};
+  for (const k of Object.keys(vars)) saved[k] = process.env[k];
   try {
-    process.env.GITHUB_ACTION_REF = 'v1';
-    const v = engineVersion();
-    assert.match(v, /^v1@[0-9a-f]{12}$/);
+    for (const [k, v] of Object.entries(vars)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+    return fn();
   } finally {
-    if (before === undefined) delete process.env.GITHUB_ACTION_REF;
-    else process.env.GITHUB_ACTION_REF = before;
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
   }
+}
+
+const CLEAR = { WATCHTOWER_ENGINE_REF: undefined, GITHUB_ACTION_REF: undefined, GITHUB_ACTIONS: undefined };
+
+test('takes the ref the action exported', () => {
+  // The action's locate step exports this. It cannot be read from
+  // GITHUB_ACTION_REF where the publisher runs — that variable exists only
+  // inside the action's own steps, and reading it there made every CI run
+  // record itself as `local`. Found by running a real scan.
+  withEnv({ ...CLEAR, WATCHTOWER_ENGINE_REF: 'v1', GITHUB_ACTIONS: 'true' }, () => {
+    assert.match(engineVersion(), /^v1@[0-9a-f]{12}$/);
+  });
 });
 
-test('a run outside the action says local rather than inventing a version', () => {
-  const before = process.env.GITHUB_ACTION_REF;
-  try {
-    delete process.env.GITHUB_ACTION_REF;
-    // `local` is the honest answer for a laptop run: there is no version anyone
-    // else could look up. The digest still identifies the code exactly.
+test('falls back to GITHUB_ACTION_REF for anything run inside the action', () => {
+  withEnv({ ...CLEAR, GITHUB_ACTION_REF: 'v2', GITHUB_ACTIONS: 'true' }, () => {
+    assert.match(engineVersion(), /^v2@[0-9a-f]{12}$/);
+  });
+});
+
+test('says unknown in CI with no ref — never local', () => {
+  // The defect this shape removes. `local` in CI is not a missing detail, it
+  // is a false statement about where a measurement came from.
+  withEnv({ ...CLEAR, GITHUB_ACTIONS: 'true' }, () => {
+    const v = engineVersion();
+    assert.match(v, /^unknown@[0-9a-f]{12}$/);
+    assert.ok(!v.startsWith('local@'), 'a CI run must never claim to be local');
+  });
+});
+
+test('says local only when genuinely not in CI', () => {
+  withEnv(CLEAR, () => {
     assert.match(engineVersion(), /^local@[0-9a-f]{12}$/);
-  } finally {
-    if (before !== undefined) process.env.GITHUB_ACTION_REF = before;
-  }
+  });
 });
 
 test('the digest is stable across calls', () => {
@@ -135,4 +160,24 @@ test('the digest does not depend on where the engine is checked out', () => {
   } finally {
     fs.rmSync(copy, { recursive: true, force: true });
   }
+});
+
+test('the action exports the ref the engine reads', () => {
+  // The two halves have to agree, and this is exactly where they did not. The
+  // engine read one variable, the action set none, and nothing failed — the
+  // version simply said `local` on every CI run. A test on either side alone
+  // would still pass today; this one covers the handover between them.
+  const action = fs.readFileSync(path.join(__dirname, '..', '..', 'action.yml'), 'utf8');
+  assert.ok(
+    /WATCHTOWER_ENGINE_REF=.*github\.action_ref/.test(action),
+    'action.yml must export WATCHTOWER_ENGINE_REF from github.action_ref',
+  );
+  assert.ok(
+    /WATCHTOWER_ENGINE_REF=[^\n]*>>\s*"\$GITHUB_ENV"/.test(action),
+    'it must go into GITHUB_ENV, or later steps cannot see it',
+  );
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'scripts', 'benchmark', 'engine-version.js'), 'utf8',
+  );
+  assert.ok(source.includes('WATCHTOWER_ENGINE_REF'), 'the engine must read the name the action sets');
 });
