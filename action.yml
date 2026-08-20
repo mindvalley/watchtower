@@ -88,8 +88,15 @@ runs:
       with:
         ruby-version: ${{ inputs.ruby-version }}
 
+    # Versions come from scripts/benchmark/scanner-pins.json, which is the one
+    # place they are written down. They used to be literals here, which meant
+    # the engine could not state which scanners produced a score without
+    # reading a file above its own directory — and that boundary is what makes
+    # the engine extractable at all. Moving them inside it removes the second
+    # copy as well: a pin and the digest that identifies it cannot disagree.
     - name: Install pinned scanners
       shell: bash
+      working-directory: ${{ github.action_path }}
       run: |
         set -euo pipefail
         # Install to a runner-writable dir — /usr/local/bin needs sudo on
@@ -97,22 +104,36 @@ runs:
         mkdir -p "$HOME/.local/bin"
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+        pin() {
+          node -p "require('./scripts/benchmark/scanner-pins.json').pinned['$1'] || (console.error('no pin for $1'), process.exit(1))"
+        }
+        GITLEAKS_VERSION="$(pin gitleaks)"
+        TRIVY_VERSION="$(pin trivy)"
+        SEMGREP_VERSION="$(pin semgrep)"
+        LIZARD_VERSION="$(pin lizard)"
+        GRAPHIFY_VERSION="$(pin graphifyy)"
+
         # Secrets. Direct tarball, not install.sh: the installer silently 404s
         # once a release is purged, which leaves you with no scanner and a
         # successful-looking step.
-        curl -fsSL https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz \
+        curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
           | tar -xz -C "$HOME/.local/bin" gitleaks
 
         # Dependency CVEs.
-        TRIVY_VERSION=0.72.0
         curl -fsSL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
           | tar -xz -C "$HOME/.local/bin" trivy
 
         # Static analysis.
-        pipx install semgrep==1.78.0
+        pipx install "semgrep==${SEMGREP_VERSION}"
         # Cyclomatic complexity for everything that is not Elixir or Ruby.
-        pipx install lizard==1.23.0
+        pipx install "lizard==${LIZARD_VERSION}"
         # Code graph for domain boundaries. Deterministic and fully offline.
-        pipx install graphifyy==0.9.28
-        # Complexity on Ruby. jscpd (duplication) is fetched on demand via npx.
+        pipx install "graphifyy==${GRAPHIFY_VERSION}"
+
+        # NOT PINNED, and this is a real gap rather than a decision — see the
+        # `floating` block in scanner-pins.json. rubocop resolves to whatever is
+        # current, as does jscpd (fetched on demand via npx inside the scan), and
+        # credo is a `~> 1.7` range. So Ruby complexity, duplication and Elixir
+        # complexity can move between two runs of the SAME engine tag. Pinning
+        # them is a scoring change and wants its own re-scan.
         gem install rubocop --no-document

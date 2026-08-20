@@ -25,10 +25,10 @@
 //
 //   { "allowances": [
 //       { "criterion": "security", "sub": "secrets",
-//         "system": "platform",
+//         "system": "billing-api",
 //         "file": "config/dev.exs", "rule": "generic-api-key",
 //         "reason": "Public reCAPTCHA site key, not a secret",
-//         "allowed_by": "joshua", "allowed_on": "2026-08-19" }
+//         "allowed_by": "a.engineer", "allowed_on": "2026-01-31" }
 //   ] }
 //
 // An entry matches a finding when EVERY field it names is equal. Leave a field

@@ -12,7 +12,7 @@
 // This lives in its own file because two callers need the SAME definition: the
 // findings report, which shortens paths on the way out, and the allowances
 // matcher, which has to shorten them on the way IN — a person writing an
-// allowance knows `config/dev.exs`, never `/tmp/scan-platform-a1b2c3/repo/
+// allowance knows `config/dev.exs`, never `/tmp/scan-billing-api-a1b2c3/repo/
 // config/dev.exs`. Two copies of this rule drifting apart would make allowances
 // silently match nothing, which reads exactly like a feature that was never
 // wired up.
