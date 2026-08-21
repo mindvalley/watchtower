@@ -22,7 +22,6 @@
 const fs = require('fs');
 const path = require('path');
 const { buildIngestPayload } = require('./build-ingest-payload');
-const { engineVersion } = require('./engine-version');
 
 // Two conditions, both required.
 //
@@ -81,13 +80,6 @@ if (require.main === module) {
     const benchmark = read('benchmark.json');
     const failures = [];
 
-    // Computed once for the whole run. Every system here was measured by the
-    // same engine, so a per-system value would be one number repeated — and
-    // printing it puts the ruler in the run log even for a publish that then
-    // fails, which is when you most want to know what produced the numbers.
-    const version = engineVersion();
-    console.log(`engine ${version}`);
-
     // Every system is attempted even after one fails. Stopping at the first
     // would leave the rest unpublished for a reason unrelated to them, and the
     // run would report a single failure while hiding how many there were.
@@ -98,7 +90,6 @@ if (require.main === module) {
           benchmark,
           findings: fs.existsSync(findingsPath) ? read(`findings-${systemKey}.json`) : null,
           systemKey,
-          engineVersion: version,
         });
 
         const res = await fetch(`${WATCHTOWER_URL}/ingest`, {
