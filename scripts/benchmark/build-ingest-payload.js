@@ -15,11 +15,7 @@
  * The pure builder is here; the CLI edge at the bottom only does file I/O.
  */
 
-// `engineVersion` is handed in rather than read here, so this stays a pure
-// function of its arguments. It is the reference mapping the boot seed has to
-// agree with, and a hidden read of the environment would make the same inputs
-// produce different output depending on where they ran.
-function buildIngestPayload({ benchmark, findings, systemKey, engineVersion = null }) {
+function buildIngestPayload({ benchmark, findings, systemKey }) {
   const entry = benchmark && benchmark.systems && benchmark.systems[systemKey];
   if (!entry) throw new Error(`unknown system '${systemKey}' — not in benchmark.json`);
 
@@ -47,10 +43,6 @@ function buildIngestPayload({ benchmark, findings, systemKey, engineVersion = nu
     colour: entry.colour ?? null,
     hard_capped: entry.hard_capped ?? false,
     coverage: entry.coverage,
-    // Which engine produced these numbers, so a movement can be told apart from
-    // a change of ruler. Optional at the receiving end for now — the three
-    // watchtowers upgrade when their tag moves, not when this ships.
-    engine_version: engineVersion,
     criteria,
     findings: (findings && findings.criteria) || {},
   };
@@ -79,7 +71,6 @@ if (require.main === module) {
       benchmark: read('benchmark.json'),
       findings: fs.existsSync(findingsPath) ? read(`findings-${systemKey}.json`) : null,
       systemKey,
-      engineVersion: require('./engine-version').engineVersion(),
     });
     const json = JSON.stringify(payload);
     if (outFile) {
