@@ -162,22 +162,55 @@ test('the digest does not depend on where the engine is checked out', () => {
   }
 });
 
-test('the action exports the ref the engine reads', () => {
-  // The two halves have to agree, and this is exactly where they did not. The
-  // engine read one variable, the action set none, and nothing failed — the
-  // version simply said `local` on every CI run. A test on either side alone
-  // would still pass today; this one covers the handover between them.
+test('the action derives the ref from its own checkout path, and runs', () => {
+  // Not a text assertion. The last two attempts at this both LOOKED right and
+  // both produced nothing at run time — GITHUB_ACTION_REF is unset where the
+  // publisher reads it, and `github.action_ref` expands to an empty string in a
+  // composite action, so the export line became `WATCHTOWER_ENGINE_REF=`.
+  //
+  // So this extracts the actual shell out of action.yml and runs it against a
+  // path shaped like the runner's, which is the only way to tell a line that
+  // works from one that merely reads well.
   const action = fs.readFileSync(path.join(__dirname, '..', '..', 'action.yml'), 'utf8');
-  assert.ok(
-    /WATCHTOWER_ENGINE_REF=.*github\.action_ref/.test(action),
-    'action.yml must export WATCHTOWER_ENGINE_REF from github.action_ref',
-  );
-  assert.ok(
-    /WATCHTOWER_ENGINE_REF=[^\n]*>>\s*"\$GITHUB_ENV"/.test(action),
-    'it must go into GITHUB_ENV, or later steps cannot see it',
-  );
+  const m = action.match(/ENGINE_REF="\$\(basename[\s\S]*?\n        fi\n/);
+  assert.ok(m, 'expected the ref-derivation block in action.yml');
+
+  const script = m[0].replace(/^ {8}/gm, '');
+  const envFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gh-env-')), 'env');
+  fs.writeFileSync(envFile, '');
+
+  const res = require('child_process').spawnSync('bash', ['-c', script], {
+    env: {
+      ...process.env,
+      GITHUB_ACTION_PATH: '/home/runner/work/_actions/mindvalley/watchtower-engine/v1',
+      GITHUB_ENV: envFile,
+    },
+    encoding: 'utf8',
+  });
+  assert.strictEqual(res.status, 0, res.stderr);
+  assert.strictEqual(fs.readFileSync(envFile, 'utf8').trim(), 'WATCHTOWER_ENGINE_REF=v1');
+});
+
+test('it writes nothing rather than writing blank', () => {
+  // An empty value is the failure that already shipped once: it looks like the
+  // export happened, and the engine cannot tell it from a missing one. Better
+  // to write nothing, so `unknown` is reached honestly.
+  const action = fs.readFileSync(path.join(__dirname, '..', '..', 'action.yml'), 'utf8');
+  const script = action.match(/ENGINE_REF="\$\(basename[\s\S]*?\n        fi\n/)[0].replace(/^ {8}/gm, '');
+  const envFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gh-env-')), 'env');
+  fs.writeFileSync(envFile, '');
+
+  require('child_process').spawnSync('bash', ['-c', script], {
+    env: { ...process.env, GITHUB_ACTION_PATH: '/', GITHUB_ENV: envFile },
+    encoding: 'utf8',
+  });
+  assert.strictEqual(fs.readFileSync(envFile, 'utf8').trim(), '',
+    'a blank ref must not be exported at all');
+});
+
+test('the engine reads the name the action sets', () => {
   const source = fs.readFileSync(
     path.join(__dirname, '..', '..', 'scripts', 'benchmark', 'engine-version.js'), 'utf8',
   );
-  assert.ok(source.includes('WATCHTOWER_ENGINE_REF'), 'the engine must read the name the action sets');
+  assert.ok(source.includes('WATCHTOWER_ENGINE_REF'), 'the two halves must agree on the name');
 });
