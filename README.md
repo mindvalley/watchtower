@@ -92,8 +92,8 @@ marked, with the reason. Nothing disappears — a page can always say "3 finding
       "file": "config/dev.exs",
       "rule": "generic-api-key",
       "reason": "Public reCAPTCHA site key, not a secret",
-      "allowed_by": "joshua",
-      "allowed_on": "2026-08-19"
+      "allowed_by": "joshua@mindvalley.com",
+      "allowed_on": "2026-08-19T09:32:00.000Z"
     }
   ]
 }

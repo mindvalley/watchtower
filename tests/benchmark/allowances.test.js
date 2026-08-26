@@ -59,6 +59,26 @@ test('an allowance without a reason is refused', () => {
   assert.throws(() => parseAllowances({ allowances: [noReason] }), /no reason/);
 });
 
+test('allowed_by must be an email address when present', () => {
+  assert.throws(
+    () => parseAllowances({ allowances: [{ ...secret(), allowed_by: 'joshua' }] }),
+    /not an email address/,
+  );
+  assert.doesNotThrow(
+    () => parseAllowances({ allowances: [{ ...secret(), allowed_by: 'joshua@mindvalley.com' }] }),
+  );
+});
+
+test('allowed_on must be a JavaScript timestamp when present', () => {
+  assert.throws(
+    () => parseAllowances({ allowances: [{ ...secret(), allowed_on: '2026-08-19' }] }),
+    /not a JavaScript timestamp/,
+  );
+  assert.doesNotThrow(
+    () => parseAllowances({ allowances: [{ ...secret(), allowed_on: '2026-08-19T09:32:00.000Z' }] }),
+  );
+});
+
 test('a missing or empty list is an empty list, not an error', () => {
   assert.deepStrictEqual(parseAllowances(null), []);
   assert.deepStrictEqual(parseAllowances({}), []);

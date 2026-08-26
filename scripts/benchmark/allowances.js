@@ -28,7 +28,7 @@
 //         "system": "billing-api",
 //         "file": "config/dev.exs", "rule": "generic-api-key",
 //         "reason": "Public reCAPTCHA site key, not a secret",
-//         "allowed_by": "a.engineer", "allowed_on": "2026-01-31" }
+//         "allowed_by": "a.engineer@example.com", "allowed_on": "2026-01-31T09:32:00.000Z" }
 //   ] }
 //
 // An entry matches a finding when EVERY field it names is equal. Leave a field
@@ -50,6 +50,10 @@
 //                  would be accepting a risk, which is a different feature.
 
 const { relativize } = require('./repo-paths');
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Matches the output of new Date().toISOString(): YYYY-MM-DDTHH:mm:ss.sssZ
+const ISO_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 // What may be matched on, per criterion and sub-metric. Keyed to the item shapes
 // the parsers in parse-reports.js actually emit.
@@ -149,6 +153,14 @@ function normaliseEntry(entry, index, source) {
 
   if (entry.system != null && (typeof entry.system !== 'string' || entry.system === '')) {
     throw new Error(`${at} has an empty system. Remove it to apply the allowance to every system.`);
+  }
+
+  if (entry.allowed_by != null && !EMAIL_RE.test(entry.allowed_by)) {
+    throw new Error(`${at} has 'allowed_by' "${entry.allowed_by}" which is not an email address.`);
+  }
+
+  if (entry.allowed_on != null && !ISO_TIMESTAMP_RE.test(entry.allowed_on)) {
+    throw new Error(`${at} has 'allowed_on' "${entry.allowed_on}" which is not a JavaScript timestamp (expected YYYY-MM-DDTHH:mm:ss.sssZ).`);
   }
 
   return {
