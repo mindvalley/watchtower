@@ -24,11 +24,10 @@ function setFor(entries, system = 'sys') {
 // correct. A refused allowance leaves a finding counted, which is the safe
 // direction; a silently inert one is indistinguishable from a broken feature.
 
-test('an allowance matching on a line number is refused', () => {
-  assert.throws(
-    () => parseAllowances({ allowances: [{ ...secret(), line: 12 }] }),
-    /line number/i,
-  );
+test('an allowance can match on a line number for secrets', () => {
+  const allow = setFor([{ ...secret(), line: 12 }]).matcherFor('security', 'secrets');
+  assert.ok(allow({ file: 'config/dev.exs', rule: 'generic-api-key', line: 12 }), 'same line should match');
+  assert.ok(!allow({ file: 'config/dev.exs', rule: 'generic-api-key', line: 99 }), 'different line should not match');
 });
 
 test('an allowance naming a field the finding does not have is refused', () => {

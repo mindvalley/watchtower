@@ -12,7 +12,7 @@ test('parseGitleaks counts findings from the gitleaks array shape', () => {
   ];
   const r = parseGitleaks(report);
   assert.strictEqual(r.secrets, 2);
-  assert.deepStrictEqual(r.items[0], { description: 'AWS key', file: 'config/prod.exs', rule: 'aws-access-token' });
+  assert.deepStrictEqual(r.items[0], { description: 'AWS key', file: 'config/prod.exs', rule: 'aws-access-token', line: null });
 });
 
 test('parseGitleaks treats null / non-array as zero', () => {

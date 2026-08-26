@@ -107,7 +107,7 @@ Allowances apply to findings that were *found*:
 
 | Criterion | Sub | Match on |
 |---|---|---|
-| `security` | `secrets` | `file`, `rule` |
+| `security` | `secrets` | `file`, `rule`, `line` |
 | `security` | `deps` | `package`, `id`, `severity`, `bucket`, `target` |
 | `security` | `sast` | `id`, `path`, `severity` |
 | `simplicity` | `complexity` | `file`, `scope`, `language` |

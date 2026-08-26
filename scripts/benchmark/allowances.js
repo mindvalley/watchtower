@@ -38,8 +38,6 @@
 //
 // Deliberately NOT supported, each for a reason:
 //
-//   line numbers   they move on the next commit, so the allowance would either
-//                  go stale silently or, worse, later match a different finding
 //   globs          an allowance is an audit record; listing the files you mean
 //                  is tedious and honest, where a pattern quietly widens over
 //                  time. Add on evidence, not in advance.
@@ -62,7 +60,7 @@ const { relativize } = require('./repo-paths');
 // stale, the failure is a refused allowance — a finding stays counted, which is
 // the safe direction.
 const MATCHABLE = {
-  'security:secrets': ['file', 'rule'],
+  'security:secrets': ['file', 'rule', 'line'],
   'security:deps': ['package', 'id', 'severity', 'bucket', 'target'],
   'security:sast': ['id', 'path', 'severity'],
   'simplicity:complexity': ['file', 'scope', 'language'],
@@ -124,13 +122,6 @@ function normaliseEntry(entry, index, source) {
   const match = {};
   for (const [field, value] of Object.entries(entry)) {
     if (META.has(field)) continue;
-    if (field === 'line') {
-      throw new Error(
-        `${at} matches on a line number. Line numbers move with the next commit, ` +
-        'so the allowance would stop matching silently or later match a different ' +
-        'finding. Name the file and rule instead.',
-      );
-    }
     if (!matchable.includes(field)) {
       throw new Error(
         `${at} matches on '${field}', which is not part of a ${key} finding. ` +
