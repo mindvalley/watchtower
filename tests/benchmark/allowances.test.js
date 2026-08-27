@@ -61,11 +61,11 @@ test('an allowance without a reason is refused', () => {
 
 test('allowed_by must be an email address when present', () => {
   assert.throws(
-    () => parseAllowances({ allowances: [{ ...secret(), allowed_by: 'joshua' }] }),
+    () => parseAllowances({ allowances: [{ ...secret(), allowed_by: 'person' }] }),
     /not an email address/,
   );
   assert.doesNotThrow(
-    () => parseAllowances({ allowances: [{ ...secret(), allowed_by: 'joshua@mindvalley.com' }] }),
+    () => parseAllowances({ allowances: [{ ...secret(), allowed_by: 'person@company.com' }] }),
   );
 });
 
