@@ -61,7 +61,7 @@ function parseGitleaks(report, { excludePaths = [], reviewRules = [], allow = nu
   let excludedByPath = 0;
   for (const f of findings) {
     if (pathMatchesAny(f?.File, excludePaths)) { excludedByPath += 1; continue; }
-    const item = { description: f?.Description, file: f?.File, rule: f?.RuleID };
+    const item = { description: f?.Description, file: f?.File, rule: f?.RuleID, line: f?.StartLine != null ? f.StartLine : null };
     // Allowed before bucketing: a review-bucket match is still re-reported every
     // scan, and being able to settle those is most of why this exists.
     const a = checkAllowed(allow, item);

@@ -24,11 +24,10 @@ function setFor(entries, system = 'sys') {
 // correct. A refused allowance leaves a finding counted, which is the safe
 // direction; a silently inert one is indistinguishable from a broken feature.
 
-test('an allowance matching on a line number is refused', () => {
-  assert.throws(
-    () => parseAllowances({ allowances: [{ ...secret(), line: 12 }] }),
-    /line number/i,
-  );
+test('an allowance can match on a line number for secrets', () => {
+  const allow = setFor([{ ...secret(), line: 12 }]).matcherFor('security', 'secrets');
+  assert.ok(allow({ file: 'config/dev.exs', rule: 'generic-api-key', line: 12 }), 'same line should match');
+  assert.ok(!allow({ file: 'config/dev.exs', rule: 'generic-api-key', line: 99 }), 'different line should not match');
 });
 
 test('an allowance naming a field the finding does not have is refused', () => {
@@ -58,6 +57,26 @@ test('an allowance for a criterion that cannot carry one is refused', () => {
 test('an allowance without a reason is refused', () => {
   const { reason, ...noReason } = secret();
   assert.throws(() => parseAllowances({ allowances: [noReason] }), /no reason/);
+});
+
+test('allowed_by must be an email address when present', () => {
+  assert.throws(
+    () => parseAllowances({ allowances: [{ ...secret(), allowed_by: 'joshua' }] }),
+    /not an email address/,
+  );
+  assert.doesNotThrow(
+    () => parseAllowances({ allowances: [{ ...secret(), allowed_by: 'joshua@mindvalley.com' }] }),
+  );
+});
+
+test('allowed_on must be a JavaScript timestamp when present', () => {
+  assert.throws(
+    () => parseAllowances({ allowances: [{ ...secret(), allowed_on: '2026-08-19' }] }),
+    /not a JavaScript timestamp/,
+  );
+  assert.doesNotThrow(
+    () => parseAllowances({ allowances: [{ ...secret(), allowed_on: '2026-08-19T09:32:00.000Z' }] }),
+  );
 });
 
 test('a missing or empty list is an empty list, not an error', () => {

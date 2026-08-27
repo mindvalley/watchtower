@@ -92,8 +92,8 @@ marked, with the reason. Nothing disappears — a page can always say "3 finding
       "file": "config/dev.exs",
       "rule": "generic-api-key",
       "reason": "Public reCAPTCHA site key, not a secret",
-      "allowed_by": "joshua",
-      "allowed_on": "2026-08-19"
+      "allowed_by": "joshua@mindvalley.com",
+      "allowed_on": "2026-08-19T09:32:00.000Z"
     }
   ]
 }
@@ -107,7 +107,7 @@ Allowances apply to findings that were *found*:
 
 | Criterion | Sub | Match on |
 |---|---|---|
-| `security` | `secrets` | `file`, `rule` |
+| `security` | `secrets` | `file`, `rule`, `line` |
 | `security` | `deps` | `package`, `id`, `severity`, `bucket`, `target` |
 | `security` | `sast` | `id`, `path`, `severity` |
 | `simplicity` | `complexity` | `file`, `scope`, `language` |

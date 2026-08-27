@@ -28,7 +28,7 @@
 //         "system": "billing-api",
 //         "file": "config/dev.exs", "rule": "generic-api-key",
 //         "reason": "Public reCAPTCHA site key, not a secret",
-//         "allowed_by": "a.engineer", "allowed_on": "2026-01-31" }
+//         "allowed_by": "a.engineer@example.com", "allowed_on": "2026-01-31T09:32:00.000Z" }
 //   ] }
 //
 // An entry matches a finding when EVERY field it names is equal. Leave a field
@@ -38,8 +38,6 @@
 //
 // Deliberately NOT supported, each for a reason:
 //
-//   line numbers   they move on the next commit, so the allowance would either
-//                  go stale silently or, worse, later match a different finding
 //   globs          an allowance is an audit record; listing the files you mean
 //                  is tedious and honest, where a pattern quietly widens over
 //                  time. Add on evidence, not in advance.
@@ -53,6 +51,10 @@
 
 const { relativize } = require('./repo-paths');
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Matches the output of new Date().toISOString(): YYYY-MM-DDTHH:mm:ss.sssZ
+const ISO_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
 // What may be matched on, per criterion and sub-metric. Keyed to the item shapes
 // the parsers in parse-reports.js actually emit.
 //
@@ -62,7 +64,7 @@ const { relativize } = require('./repo-paths');
 // stale, the failure is a refused allowance — a finding stays counted, which is
 // the safe direction.
 const MATCHABLE = {
-  'security:secrets': ['file', 'rule'],
+  'security:secrets': ['file', 'rule', 'line'],
   'security:deps': ['package', 'id', 'severity', 'bucket', 'target'],
   'security:sast': ['id', 'path', 'severity'],
   'simplicity:complexity': ['file', 'scope', 'language'],
@@ -124,13 +126,6 @@ function normaliseEntry(entry, index, source) {
   const match = {};
   for (const [field, value] of Object.entries(entry)) {
     if (META.has(field)) continue;
-    if (field === 'line') {
-      throw new Error(
-        `${at} matches on a line number. Line numbers move with the next commit, ` +
-        'so the allowance would stop matching silently or later match a different ' +
-        'finding. Name the file and rule instead.',
-      );
-    }
     if (!matchable.includes(field)) {
       throw new Error(
         `${at} matches on '${field}', which is not part of a ${key} finding. ` +
@@ -158,6 +153,14 @@ function normaliseEntry(entry, index, source) {
 
   if (entry.system != null && (typeof entry.system !== 'string' || entry.system === '')) {
     throw new Error(`${at} has an empty system. Remove it to apply the allowance to every system.`);
+  }
+
+  if (entry.allowed_by != null && !EMAIL_RE.test(entry.allowed_by)) {
+    throw new Error(`${at} has 'allowed_by' "${entry.allowed_by}" which is not an email address.`);
+  }
+
+  if (entry.allowed_on != null && !ISO_TIMESTAMP_RE.test(entry.allowed_on)) {
+    throw new Error(`${at} has 'allowed_on' "${entry.allowed_on}" which is not a JavaScript timestamp (expected YYYY-MM-DDTHH:mm:ss.sssZ).`);
   }
 
   return {
