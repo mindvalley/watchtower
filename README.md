@@ -35,6 +35,14 @@ Numbering is not contiguous: two criteria from the original spec were removed.
 - **Language-agnostic first.** Scoring never takes language as an input.
   Language enters only as a lookup for which files are manifests, source, or
   tests. Language-specific parsers raise fidelity; they are never a prerequisite.
+- **One number for the system.** Criteria score out of 5; the system composite is
+  their mean rescaled to 100, banded red 0–40, amber 41–70, green 71–100 (the
+  former 2.0 and 3.5 boundaries, rescaled — no new anchor). A Critical finding
+  multiplies the composite by 0.4, so the best a capped system can reach is
+  exactly 40, still red. The colour is derived from that number and nothing else,
+  so a score can never disagree with the badge beside it. Scaling rather than
+  clamping keeps capped systems ordered against each other, which is what says
+  which of them is closest to being fixable.
 
 ## Using it
 

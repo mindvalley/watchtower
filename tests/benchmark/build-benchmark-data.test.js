@@ -39,10 +39,20 @@ test('buildBenchmarkData scores each system C9 from its three reports', async ()
   assert.strictEqual(out.systems.alpha.hard_capped, false);
   assert.strictEqual(out.systems.alpha.colour, 'green');
   assert.strictEqual(out.systems.alpha.criteria['9'].audit.deps.transitive.high, 1);
+  // The composite arrives out of 100 while its own criteria stay out of 5. This
+  // is the only place the two scales meet end to end: buildSystemEntry's tests
+  // cannot see whether the orchestrator reformats what it returns, and until
+  // today nothing checked that it doesn't.
+  assert.strictEqual(out.systems.alpha.score, 100);
 
   // echo: secret present -> hard-cap red
   assert.strictEqual(out.systems.echo.hard_capped, true);
   assert.strictEqual(out.systems.echo.colour, 'red');
+  // 26, not 0: the secret zeroes one sub-metric, but deps and sast are clean, so
+  // C9 is 3.3 and the ceiling scales it to 26. That gap is the point of scaling
+  // rather than clamping — echo is capped, and still visibly better placed than
+  // a system whose every sub-metric is on the floor.
+  assert.strictEqual(out.systems.echo.score, 26);
   assert.strictEqual(out.example, false);
 });
 
