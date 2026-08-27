@@ -59,8 +59,12 @@ test('a Critical finding puts the SCORE in the red band, not just the colour', (
 test('the cap scales rather than clamps, so capped systems still rank against each other', () => {
   // A flat clamp would flatten every capped system to one number and destroy the
   // only signal that says which of them is closest to being fixable.
+  //
+  // Both means must sit ABOVE the clamp for this to bite. The first version used
+  // 4.5 and 1.0; under a clamp at 40 those become 40 and 20, so ordering survived
+  // and the plant walked past. Proven by planting the clamp and watching it pass.
   const sound = scoreOf(at(4.5), at(4.5, true));
-  const rotten = scoreOf(at(1.0), at(1.0, true));
+  const rotten = scoreOf(at(3.0), at(3.0, true));
   assert.ok(sound > rotten, `expected the sounder capped system to rank higher (${sound} vs ${rotten})`);
   assert.ok(sound <= RED_MAX && rotten <= RED_MAX);
 });
