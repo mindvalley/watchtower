@@ -24,10 +24,45 @@ function setFor(entries, system = 'sys') {
 // correct. A refused allowance leaves a finding counted, which is the safe
 // direction; a silently inert one is indistinguishable from a broken feature.
 
-test('an allowance can match on a line number for secrets', () => {
+test('an allowance pinned to a line matches only that line', () => {
   const allow = setFor([{ ...secret(), line: 12 }]).matcherFor('security', 'secrets');
   assert.ok(allow({ file: 'config/dev.exs', rule: 'generic-api-key', line: 12 }), 'same line should match');
   assert.ok(!allow({ file: 'config/dev.exs', rule: 'generic-api-key', line: 99 }), 'different line should not match');
+});
+
+test('an allowance without a line matches findings that carry a line number', () => {
+  // Omitting `line` means "any line" — it must not become implicitly required.
+  const allow = setFor([secret()]).matcherFor('security', 'secrets');
+  assert.ok(allow({ file: 'config/dev.exs', rule: 'generic-api-key', line: 12 }), 'finding at line 12 should match');
+  assert.ok(allow({ file: 'config/dev.exs', rule: 'generic-api-key', line: 99 }), 'finding at any other line should also match');
+});
+
+test('an allowance pinned to a line does not fire when the finding has no line number', () => {
+  // Cannot confirm the line matches when the scanner didn't report one.
+  const allow = setFor([{ ...secret(), line: 12 }]).matcherFor('security', 'secrets');
+  assert.ok(!allow({ file: 'config/dev.exs', rule: 'generic-api-key', line: null }), 'line unknown — cannot confirm match');
+});
+
+test('gitleaks: an allowance without a line matches a finding that carries a StartLine', () => {
+  const report = [{ Description: 'k', File: 'config/dev.exs', RuleID: 'generic-api-key', StartLine: 12 }];
+  const before = parseGitleaks(report);
+  assert.strictEqual(before.secrets, 1, 'fixture must produce a finding');
+
+  const allow = setFor([secret()]).matcherFor('security', 'secrets');
+  const after = parseGitleaks(report, { allow });
+  assert.strictEqual(after.secrets, 0, 'allowance without line should absorb a finding that has a line');
+  assert.strictEqual(after.allowed, 1);
+});
+
+test('gitleaks: an allowance pinned to a line absorbs only the matching line', () => {
+  const report = [
+    { Description: 'k', File: 'config/dev.exs', RuleID: 'generic-api-key', StartLine: 12 },
+    { Description: 'k', File: 'config/dev.exs', RuleID: 'generic-api-key', StartLine: 99 },
+  ];
+  const allow = setFor([{ ...secret(), line: 12 }]).matcherFor('security', 'secrets');
+  const after = parseGitleaks(report, { allow });
+  assert.strictEqual(after.secrets, 1, 'only the line-12 finding should be absorbed');
+  assert.strictEqual(after.allowed, 1);
 });
 
 test('an allowance naming a field the finding does not have is refused', () => {
