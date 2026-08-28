@@ -225,6 +225,74 @@ describe('parsers', () => {
       assert.strictEqual(after.raw.critical, 1, 'an allowed CVE should leave the raw count too');
       assert.strictEqual(after.allowed, 1);
     });
+
+    test('an allowance scoped to bucket and installed version absorbs only the exact combination', () => {
+      const reason = 'only exploitable when cowboy is pulled in transitively at this version';
+      const allow = setFor([{
+        criterion: 'security', sub: 'deps',
+        package: 'cowboy', bucket: 'transitive', installed: '3.0',
+        reason,
+      }]).matcherFor('security', 'deps');
+
+      // cowboy absent from prodDeps/devDeps → transitive bucket
+      const transitiveReport = {
+        Results: [{
+          Target: 'mix.lock',
+          Vulnerabilities: [
+            { Severity: 'HIGH', PkgName: 'cowboy', VulnerabilityID: 'CVE-1', InstalledVersion: '3.0' },
+            { Severity: 'HIGH', PkgName: 'cowboy', VulnerabilityID: 'CVE-2', InstalledVersion: '4.0' },
+          ],
+        }],
+      };
+      const transitive = parseTrivy(transitiveReport, { allow });
+      assert.strictEqual(transitive.allowed, 1, 'only the v3.0 finding should be absorbed');
+      assert.strictEqual(transitive.transitive.high, 1, 'v4.0 finding must survive');
+      assert.deepStrictEqual(transitive.allowed_items, [
+        { package: 'cowboy', id: 'CVE-1', severity: 'high', installed: '3.0', fixed: null, target: 'mix.lock', bucket: 'transitive', allowed_reason: reason },
+      ]);
+
+      // cowboy in prodDeps → prod bucket; same version, wrong bucket — not absorbed
+      const prodReport = {
+        Results: [{
+          Target: 'mix.lock',
+          Vulnerabilities: [
+            { Severity: 'HIGH', PkgName: 'cowboy', VulnerabilityID: 'CVE-1', InstalledVersion: '3.0' },
+          ],
+        }],
+      };
+      const prod = parseTrivy(prodReport, { prodDeps: ['cowboy'], allow });
+      assert.strictEqual(prod.allowed, 0, 'prod cowboy must not be absorbed — bucket constraint');
+      assert.strictEqual(prod.prod.high, 1);
+    });
+
+    test('an allowed CVE by ID is absorbed regardless of which package carries it', () => {
+      const report = {
+        Results: [{
+          Target: 'mix.lock',
+          Vulnerabilities: [
+            { Severity: 'CRITICAL', PkgName: 'cowboy', VulnerabilityID: 'CVE-2023-44487' },
+            { Severity: 'CRITICAL', PkgName: 'bandit', VulnerabilityID: 'CVE-2023-44487' },
+            { Severity: 'CRITICAL', PkgName: 'cowboy', VulnerabilityID: 'CVE-2024-99999' },
+          ],
+        }],
+      };
+      const opts = { prodDeps: ['cowboy', 'bandit'] };
+      assert.strictEqual(parseTrivy(report, opts).prod.critical, 3, 'fixture must produce three critical findings');
+
+      const allow = setFor([{
+        criterion: 'security', sub: 'deps', id: 'CVE-2023-44487',
+        reason: 'HTTP/2 rapid-reset — mitigated at the load balancer, not exploitable here',
+      }]).matcherFor('security', 'deps');
+      const after = parseTrivy(report, { ...opts, allow });
+      assert.strictEqual(after.prod.critical, 1, 'only the unrelated CVE should survive');
+      assert.strictEqual(after.raw.critical, 1, 'allowed CVEs are absent from raw too');
+      assert.strictEqual(after.allowed, 2);
+      const reason = 'HTTP/2 rapid-reset — mitigated at the load balancer, not exploitable here';
+      assert.deepStrictEqual(after.allowed_items, [
+        { package: 'cowboy', id: 'CVE-2023-44487', severity: 'critical', installed: null, fixed: null, target: 'mix.lock', bucket: 'prod', allowed_reason: reason },
+        { package: 'bandit', id: 'CVE-2023-44487', severity: 'critical', installed: null, fixed: null, target: 'mix.lock', bucket: 'prod', allowed_reason: reason },
+      ]);
+    });
   });
 
   describe('semgrep', () => {

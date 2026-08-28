@@ -65,7 +65,7 @@ const ISO_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 // the safe direction.
 const MATCHABLE = {
   'security:secrets': ['file', 'rule', 'line'],
-  'security:deps': ['package', 'id', 'severity', 'bucket', 'target'],
+  'security:deps': ['package', 'id', 'severity', 'installed', 'fixed', 'bucket', 'target'],
   'security:sast': ['id', 'path', 'severity'],
   'simplicity:complexity': ['file', 'scope', 'language'],
 };

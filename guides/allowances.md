@@ -63,12 +63,48 @@ An allowance does not affect scoring, but the finding is still included in the r
 
 Each field you add narrows the allowance — `rule` alone matches it anywhere in the codebase, `rule` + `file` only in that file. Paths are repo-relative.
 
+**Deps — allow a CVE anywhere it appears:**
+
+```json
+{
+  "allowances": [
+    {
+      "criterion": "security",
+      "sub": "deps",
+      "system": "platform",
+      "id": "CVE-2023-44487",
+      "reason": "HTTP/2 rapid-reset — mitigated at the load balancer, not exploitable here",
+      "allowed_by": "person@company.com",
+      "allowed_on": "2026-08-19T09:32:00.000Z"
+    }
+  ]
+}
+```
+
+**Deps — allow a specific package (all CVEs for that package):**
+
+```json
+{
+  "allowances": [
+    {
+      "criterion": "security",
+      "sub": "deps",
+      "system": "platform",
+      "package": "storybook",
+      "reason": "dev-only in practice — not installed in production",
+      "allowed_by": "person@company.com",
+      "allowed_on": "2026-08-19T09:32:00.000Z"
+    }
+  ]
+}
+```
+
 Allowances apply to findings that were *found*:
 
 | Criterion | Sub | Match on |
 |---|---|---|
 | `security` | `secrets` | `file`, `rule`, `line` |
-| `security` | `deps` | `package`, `id`, `severity`, `bucket`, `target` |
+| `security` | `deps` | `package`, `id`, `severity`, `installed`, `fixed`, `bucket`, `target` |
 | `security` | `sast` | `id`, `path`, `severity` |
 | `simplicity` | `complexity` | `file`, `scope`, `language` |
 
