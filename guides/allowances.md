@@ -101,12 +101,40 @@ Each field you add narrows the allowance — `rule` alone matches it anywhere in
 
 Allowances apply to findings that were *found*:
 
-| Criterion | Sub | Match on |
-|---|---|---|
-| `security` | `secrets` | `file`, `rule`, `line` |
-| `security` | `deps` | `package`, `id`, `severity`, `installed`, `fixed`, `bucket`, `target` |
-| `security` | `sast` | `id`, `path`, `severity` |
-| `simplicity` | `complexity` | `file`, `scope`, `language` |
+**`security` / `secrets`**
+
+| Field | Meaning |
+|---|---|
+| `file` | Repo-relative path of the file containing the secret |
+| `rule` | Gitleaks rule ID, e.g. `generic-api-key` |
+| `line` | Line number; omit to match the rule anywhere in the file |
+
+**`security` / `deps`**
+
+| Field | Meaning |
+|---|---|
+| `package` | Package name |
+| `id` | CVE identifier, e.g. `CVE-2023-44487` |
+| `severity` | Normalized severity: `critical`, `high`, `medium`, or `low` |
+| `installed` | Installed version string |
+| `bucket` | Dependency classification: `prod`, `dev`, or `transitive` |
+| `target` | Lockfile the scanner read, e.g. `mix.lock` |
+
+**`security` / `sast`**
+
+| Field | Meaning |
+|---|---|
+| `id` | Rule ID as reported by the SAST tool |
+| `path` | Repo-relative path of the file containing the finding |
+| `severity` | Normalized severity: `high`, `medium`, or `low` |
+
+**`simplicity` / `complexity`**
+
+| Field | Meaning |
+|---|---|
+| `file` | Repo-relative path of the file containing the violation |
+| `scope` | Function or method name the linter reported on |
+| `language` | Language the linter runs against |
 
 Allowances only apply to detected findings, not to absences like "no rollback configured".
 
