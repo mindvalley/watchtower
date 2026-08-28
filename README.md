@@ -82,58 +82,7 @@ gets committed.
 
 ### Allowances
 
-Some findings are not problems: a public site key that reads as a secret, a CVE
-in a package only ever loaded in development. Without a way to record that, every
-scan re-reports a judgement already made, and the reports stop being read.
-
-An allowance **removes the finding from the score and keeps it in the report**,
-marked, with the reason. Nothing disappears — a page can always say "3 findings,
-1 allowed".
-
-```json
-{
-  "allowances": [
-    {
-      "criterion": "security",
-      "sub": "secrets",
-      "system": "platform",
-      "file": "config/dev.exs",
-      "rule": "generic-api-key",
-      "reason": "Public reCAPTCHA site key, not a secret",
-      "allowed_by": "joshua@mindvalley.com",
-      "allowed_on": "2026-08-19T09:32:00.000Z"
-    }
-  ]
-}
-```
-
-An entry matches when **every field it names is equal**. Leave a field out and it
-broadens — drop `file` and that rule is allowed anywhere; drop `system` and it
-applies to every system this watchtower measures. Paths are repo-relative.
-
-Allowances apply to findings that were *found*:
-
-| Criterion | Sub | Match on |
-|---|---|---|
-| `security` | `secrets` | `file`, `rule`, `line` |
-| `security` | `deps` | `package`, `id`, `severity`, `bucket`, `target` |
-| `security` | `sast` | `id`, `path`, `severity` |
-| `simplicity` | `complexity` | `file`, `scope`, `language` |
-
-They do **not** apply to absences — "no rollback configured" is not a false
-positive, and allowing it would be accepting a risk, which is a different thing.
-Duplication is also excluded: its percentage comes from the duplication tool's own
-totals rather than the list of duplicated blocks, so filtering the list would
-remove the finding and leave the score where it was.
-
-Every run reports how many findings each allowance absorbed, and names any that
-absorbed none — either the finding has been fixed and the entry should go, or it
-never matched and has been suppressing nothing since it was written.
-
-Two shapes, one file format. Where the engine repo is also the runner, the file
-sits beside the config in that repo. Where the engine is pulled in as a pinned
-action, the file lives in the private repo that calls it — the engine carries the
-mechanism and nobody's judgements.
+See [guides/allowances.md](guides/allowances.md).
 
 ## Development
 
