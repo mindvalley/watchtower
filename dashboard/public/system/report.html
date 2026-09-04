@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Per-finding report — Agentic Compatibility Benchmark.">
+<meta name="color-scheme" content="dark">
+<title>Findings report — Agentic Compatibility</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="icon" href="/img/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<script src="/js/loading.js"></script>
+</head>
+<body>
+<div class="page">
+  <a id="back-link" href="/" class="back-link">← Scorecard</a>
+  <header class="header">
+    <div>
+      <div class="header-title" id="report-title">Findings report</div>
+      <div class="header-sub" id="report-sub"></div>
+    </div>
+  </header>
+  <main id="report-body"></main>
+  <footer class="footer">
+    <span>Agentic Compatibility Benchmark</span>
+    <span id="report-date"></span>
+  </footer>
+</div>
+<script src="/system/report.js"></script>
+<script>
+  // Derive the system key from the path: /system/<name>/report
+  (function () {
+    const m = location.pathname.match(/\/system\/([^/]+)\/report/);
+    initReport(m ? decodeURIComponent(m[1]) : '');
+  })();
+</script>
+</body>
+</html>

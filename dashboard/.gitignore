@@ -1,0 +1,12 @@
+node_modules/
+reports/
+
+# macOS
+.DS_Store
+
+# Erlang crash dumps — written into the working tree by a crashed BEAM run.
+# This folder is about to become the root of its own repository, and the
+# repo-root .gitignore that used to cover these does not travel with it. Caught
+# on 2026-09-04 by building the public repo locally and finding both of them in
+# the published tree.
+erl_crash.dump
