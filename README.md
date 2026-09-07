@@ -43,6 +43,41 @@ board says so across the top. It refuses to run against a database that already
 holds systems, because mock scores sitting beside real ones are
 indistinguishable from measurements.
 
+## Loading a scan you ran yourself
+
+A scan whose configuration names no publishing destination writes its results
+out as files and posts nowhere — the right behaviour on a laptop, and what you
+get by default. `npm run load` is the other end of that:
+
+```sh
+npm run load -- path/to/data
+npm run load -- path/to/data --config path/to/watchtower.config.json
+```
+
+The directory is the one the scan wrote: `benchmark.json`, and a
+`findings-<system>.json` beside it for each system.
+
+`--config` is optional and points at the watchtower configuration, so the board
+can record each system's repository and stack. Without it those are blank —
+`POST /ingest` takes them from its allowlist, and there is no allowlist when you
+are standing at the machine.
+
+`--system <key>` loads a subset and can be repeated. `--dry-run` validates and
+prints what would be written.
+
+**This is not a second way into the database.** It builds the payload `/ingest`
+receives, runs it through the same validation and the same transform, and calls
+the same write — everything except the authentication. A loaded board and a
+published board are the same board; otherwise moving a system from one to the
+other would change its numbers for reasons unrelated to its code.
+
+Two consequences worth knowing. A directory goes in whole or not at all: if any
+system in it would be refused, nothing is written, because eight loaded and
+three not is a state you cannot see from the board. And running it twice is
+safe — each system is fully replaced, exactly as a publish replaces it, while
+`scan_history` gains one entry per run, which is what lets the board show
+movement.
+
 ## Run it split up
 
 Same thing without the container: bring a Postgres, point `DATABASE_URL` at it,
