@@ -29,7 +29,8 @@ const { documentedApisDisposition } = require('./criterion-stacks');
 const { parseOpenApi, parseOpenApiText } = require('./openapi-reader');
 const { parseGraphqlSdl } = require('./graphql-sdl-reader');
 
-const { systemConfig, reportsDir } = require('./engine-config');
+const { systemConfig, reportsDir, systemTarget } = require('./engine-config');
+const { materialise } = require('./target-tree');
 const SYSTEM = process.env.SYSTEM;
 const { GH_TOKEN } = process.env;
 const HELPER = path.join(__dirname, 'absinthe_desc_parse.exs');
@@ -158,10 +159,20 @@ function main() {
     return;
   }
 
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), `scan-c2-${SYSTEM}-`));
-  const repoDir = path.join(work, 'repo');
-  const url = `https://x-access-token:${GH_TOKEN}@github.com/${cfg.repo}.git`;
-  sh('git', ['clone', '--depth', '1', url, repoDir]);
+  const tree = materialise(systemTarget(SYSTEM), { prefix: `c2-${SYSTEM}`, token: GH_TOKEN });
+  try {
+    for (const note of tree.notes) console.log(`  ${note}`);
+    scanTree(tree, outDir, cfg, disposition);
+  } finally {
+    // Previously never removed. The Elixir path also writes its AST extraction
+    // into this same directory, so it was the larger of the two leaks.
+    tree.cleanup();
+  }
+}
+
+function scanTree(tree, outDir, cfg, disposition) {
+  const repoDir = tree.dir;
+  const work = path.dirname(repoDir);
 
   let report;
   if (disposition === 'elixir-ast') {
@@ -179,12 +190,12 @@ function main() {
       // score changes. What changes is that a missing file now means failure
       // again, which is the only thing that lets anything upstream check.
       report = buildReport({ applicable: true, records: [], filesParsed: 0 });
-      console.log(`C2 ${SYSTEM} (${cfg.repo}, stack=${cfg.stack}) — no committed API artifact (-> Pending)`);
+      console.log(`C2 ${SYSTEM} (${tree.label}, stack=${cfg.stack}) — no committed API artifact (-> Pending)`);
     }
   }
 
   writeJson(outDir, 'documented-apis', report);
-  console.log(`Scanned C2 ${SYSTEM} (${cfg.repo}, stack=${cfg.stack}, disposition=${disposition}) -> ${outDir}`);
+  console.log(`Scanned C2 ${SYSTEM} (${tree.label}, stack=${cfg.stack}, disposition=${disposition}) -> ${outDir}`);
 }
 
 if (require.main === module) main();

@@ -29,7 +29,8 @@ const GRAPHIFY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 // The benchmark spec's own window for boundary drift ("last 90 days").
 const COUPLING_WINDOW_DAYS = 90;
 
-const { systemConfig, reportsDir, configPath } = require('./engine-config');
+const { reportsDir, systemTarget } = require('./engine-config');
+const { materialise } = require('./target-tree');
 
 // Directories excluded from the file walk. Covers Node, Elixir, Python,
 // Go/Bundler/Composer vendoring, compiled output trees, build caches, editor
@@ -88,7 +89,14 @@ function indeterminateReport(reason, discovery, extra = {}) {
 // Reads git history, never the code graph. That independence is the point: it is
 // the only C1 metric that still works on a stack whose extractor under-resolves.
 // A failure here degrades to "not measured", never to a clean bill of health.
-function collectChangeCoupling(repoDir, discovery, files, readText) {
+//
+// historyDir is separate from repoDir because a local target is COPIED into a
+// temp tree that has no .git — see target-tree.js. The log is then read from the
+// folder the copy came from, which is only ever read from. The paths git prints
+// are repo-relative, and the copy preserves them, so the two line up. A target
+// that is not a git repository at all passes null and lands in the catch below,
+// which is the honest answer: not measured.
+function collectChangeCoupling(repoDir, discovery, files, readText, historyDir = repoDir) {
   const base = {
     window_days: COUPLING_WINDOW_DAYS,
     thresholds: CODE_MAAT_DEFAULTS,
@@ -103,12 +111,14 @@ function collectChangeCoupling(repoDir, discovery, files, readText) {
 
   let log;
   try {
+    if (!historyDir) throw new Error('no history location');
     log = sh('git', [
       'log', '--no-merges', `--since=${COUPLING_WINDOW_DAYS} days ago`,
       '--format=commit%x09%H', '--name-only',
-    ], { cwd: repoDir, stdio: ['ignore', 'pipe', 'pipe'] });
+    ], { cwd: historyDir, stdio: ['ignore', 'pipe', 'pipe'] });
   } catch {
-    // No history available (a bare depth-1 clone that could not be deepened).
+    // No history available: a bare depth-1 clone that could not be deepened, or
+    // a local folder that is not a git repository.
     return { ...base, unavailable: 'git history for the window could not be read' };
   }
 
@@ -137,7 +147,7 @@ function collectChangeCoupling(repoDir, discovery, files, readText) {
   };
 }
 
-function scanRepo(repoDir) {
+function scanRepo(repoDir, { historyDir = repoDir } = {}) {
   const files = listFiles(repoDir);
   const readText = (p) => {
     try { return fs.readFileSync(path.join(repoDir, p), 'utf8'); } catch { return null; }
@@ -206,7 +216,7 @@ function scanRepo(repoDir) {
     // needs history and manifests, not the graph, so it is still measurable and
     // the scorer can grade the criterion on it alone. Without this, a repo whose
     // graph is degenerate loses a signal we actually have.
-    report.change_coupling = collectChangeCoupling(repoDir, discovery, files, readText);
+    report.change_coupling = collectChangeCoupling(repoDir, discovery, files, readText, historyDir);
     return report;
   }
 
@@ -246,7 +256,7 @@ function scanRepo(repoDir) {
     },
     cycles,
     fan_out: fanOut,
-    change_coupling: collectChangeCoupling(repoDir, discovery, files, readText),
+    change_coupling: collectChangeCoupling(repoDir, discovery, files, readText, historyDir),
     external_targets: externalByModule,
     external_target_detection: {
       files_scanned: filesScannedForTargets,
@@ -256,14 +266,6 @@ function scanRepo(repoDir) {
     },
     graph: graphAudit,
   };
-}
-
-function resolveRepo(system) {
-  const entry = systemConfig(system);
-  if (!entry.repo) {
-    throw new Error(`no repo for SYSTEM=${system} in ${configPath()}`);
-  }
-  return entry.repo;
 }
 
 function main() {
@@ -278,23 +280,10 @@ function main() {
 
   const system = process.env.SYSTEM;
   if (!system) throw new Error('SYSTEM env var is required');
-  const repo = resolveRepo(system);
 
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), `scan-${system}-`));
+  const tree = materialise(systemTarget(system), { prefix: system, token: process.env.GH_TOKEN });
   try {
-    const repoDir = path.join(tmp, 'repo');
-    const token = process.env.GH_TOKEN;
-    const url = token
-      ? `https://x-access-token:${token}@github.com/${repo}.git`
-      : `https://github.com/${repo}.git`;
-
-    // Clone with a caught error so the URL (which may carry a token) never
-    // propagates to callers. Only the repo path is safe to log.
-    try {
-      sh('git', ['clone', '--depth', '1', url, repoDir], { stdio: ['ignore', 'pipe', 'pipe'] });
-    } catch {
-      throw new Error(`git clone failed for ${repo} — check network and credentials`);
-    }
+    for (const note of tree.notes) process.stdout.write(`  ${note}\n`);
 
     // Change coupling needs commit history, which a depth-1 clone does not have.
     // Backfill the window with commits and trees but NOT file contents:
@@ -302,14 +291,20 @@ function main() {
     // monorepo) and the depth-1 working tree already holds the files graphify
     // reads, so nothing triggers a lazy blob fetch. A failure here is tolerated:
     // the coupling collector degrades to "not measured", never to a clean score.
-    try {
-      sh('git', ['fetch', '--quiet', '--filter=blob:none', `--shallow-since=${COUPLING_WINDOW_DAYS} days ago`, 'origin'],
-        { cwd: repoDir, stdio: ['ignore', 'pipe', 'pipe'] });
-    } catch {
-      process.stderr.write(`boundaries: ${system} — history backfill failed; change coupling will be unmeasured\n`);
+    //
+    // Only for a clone. A local target's history is the source folder's own and
+    // is already complete — and this would be a `git fetch` inside somebody's
+    // working copy, which is not something a scanner gets to do.
+    if (tree.kind === 'repo') {
+      try {
+        sh('git', ['fetch', '--quiet', '--filter=blob:none', `--shallow-since=${COUPLING_WINDOW_DAYS} days ago`, 'origin'],
+          { cwd: tree.dir, stdio: ['ignore', 'pipe', 'pipe'] });
+      } catch {
+        process.stderr.write(`boundaries: ${system} — history backfill failed; change coupling will be unmeasured\n`);
+      }
     }
 
-    const report = scanRepo(repoDir);
+    const report = scanRepo(tree.dir, { historyDir: tree.historyDir });
     const outDir = reportsDir(system);
     fs.writeFileSync(path.join(outDir, 'boundaries.json'), `${JSON.stringify(report, null, 2)}\n`);
     process.stdout.write(
@@ -318,12 +313,13 @@ function main() {
       + `${report.indeterminate ? ' (indeterminate)' : ''}\n`
     );
   } finally {
-    // Always remove the temp directory — success or failure — so the clone
-    // (which may contain a plaintext token in .git/config) is never left on disk.
-    fs.rmSync(tmp, { recursive: true, force: true });
+    // Always remove the temp directory — success or failure — so a clone (which
+    // may hold a plaintext token in .git/config) is never left on disk. It
+    // removes only what it created; a local target's source folder is untouched.
+    tree.cleanup();
   }
 }
 
 if (require.main === module) main();
 
-module.exports = { scanRepo, resolveRepo, GRAPHIFY_VERSION, MAX_CYCLES };
+module.exports = { scanRepo, GRAPHIFY_VERSION, MAX_CYCLES };

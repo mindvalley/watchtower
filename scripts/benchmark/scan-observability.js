@@ -23,11 +23,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
-const { execFileSync } = require('child_process');
 const SIGNALS = require('./observability-signals');
 
-const { systemConfig, reportsDir } = require('./engine-config');
+const { systemConfig, reportsDir, systemTarget } = require('./engine-config');
+const { materialise } = require('./target-tree');
 const SYSTEM = process.env.SYSTEM;
 const { GH_TOKEN } = process.env;
 
@@ -54,10 +53,6 @@ const MANIFEST_MATCH = {
   js: (n) => n === 'package.json',
   python: (n) => n === 'pyproject.toml' || /^requirements.*\.txt$/.test(n),
 };
-
-function sh(cmd, args, opts = {}) {
-  return execFileSync(cmd, args, { stdio: ['ignore', 'pipe', 'inherit'], ...opts });
-}
 
 function writeJson(dir, name, obj) {
   fs.mkdirSync(dir, { recursive: true });
@@ -207,17 +202,21 @@ function scanRepo(repoDir, stack) {
 
 function main() {
   const cfg = systemConfig(SYSTEM);
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), `scan-c4-${SYSTEM}-`));
-  const repoDir = path.join(work, 'repo');
   const outDir = reportsDir(SYSTEM);
+  const tree = materialise(systemTarget(SYSTEM), { prefix: `c4-${SYSTEM}`, token: GH_TOKEN });
 
-  const url = `https://x-access-token:${GH_TOKEN}@github.com/${cfg.repo}.git`;
-  sh('git', ['clone', '--depth', '1', url, repoDir]);
-
-  const report = scanRepo(repoDir, cfg.stack);
-  writeJson(outDir, 'observability', report);
-  const fe = report.frontend_errors.applicable ? 'FE:on' : 'FE:N/A';
-  console.log(`Scanned C4 ${SYSTEM} (${cfg.repo}, ${cfg.stack}->${BACKEND_KEY[cfg.stack]}, ${fe}) -> ${outDir}`);
+  // The tree used to be left on disk after every run, token and all. Removed in
+  // a `finally` now, which also matters for a local target: nothing here may
+  // touch the source folder, and the only thing it can remove is its own copy.
+  try {
+    for (const note of tree.notes) console.log(`  ${note}`);
+    const report = scanRepo(tree.dir, cfg.stack);
+    writeJson(outDir, 'observability', report);
+    const fe = report.frontend_errors.applicable ? 'FE:on' : 'FE:N/A';
+    console.log(`Scanned C4 ${SYSTEM} (${tree.label}, ${cfg.stack}->${BACKEND_KEY[cfg.stack]}, ${fe}) -> ${outDir}`);
+  } finally {
+    tree.cleanup();
+  }
 }
 
 if (require.main === module) {

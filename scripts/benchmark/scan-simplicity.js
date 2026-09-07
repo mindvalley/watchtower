@@ -33,9 +33,10 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 const { extractLinterJson } = require('./parse-reports');
 const { discoverLanguages } = require('./simplicity-stacks');
+const { missingToolchains, missingToolchainMessage } = require('./required-toolchains');
 const { extractScript } = require('./vue-sfc');
 const { detectGate, mentionsEslintComplexityRule, ESLINT_CONFIG_CANDIDATES } = require('./complexity-gate');
 const {
@@ -43,7 +44,8 @@ const {
   lizardExcludeArgs, rubocopExcludeGlobs, credoExcludedRegexes,
 } = require('./simplicity-exclusions');
 
-const { systemConfig, reportsDir } = require('./engine-config');
+const { systemConfig, reportsDir, systemTarget } = require('./engine-config');
+const { materialise } = require('./target-tree');
 const SYSTEM = process.env.SYSTEM;
 const { GH_TOKEN } = process.env;
 
@@ -309,30 +311,42 @@ function runJscpd(repoDir, outDir) {
 function main() {
   const cfg = systemConfig(SYSTEM);
   const stack = cfg.stack || 'elixir';
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), `scan-c8-${SYSTEM}-`));
-  const repoDir = path.join(work, 'repo');
   const outDir = reportsDir(SYSTEM);
 
+  // The tree must be removed in a finally: a clone's .git/config holds the token
+  // in plaintext. target-tree also keeps the clone's stderr out of the log for
+  // the same reason — the URL carrying the token reaches it before any catch
+  // here would run — and removes only what it created, so a local target's
+  // source folder is never touched.
+  const tree = materialise(systemTarget(SYSTEM), { prefix: `c8-${SYSTEM}`, token: GH_TOKEN });
+  const work = path.dirname(tree.dir);
+  const repoDir = tree.dir;
+
   try {
-    // The clone URL embeds the token and git writes it into .git/config, so the
-    // tree must be removed in a finally. On a failed clone git also writes the URL
-    // to its own stderr. `sh` normally uses `inherit` for stderr (linter diagnostics
-    // are useful), but for the clone call we capture stderr instead of inheriting
-    // it — otherwise the token reaches CI logs before our catch runs. The redacted
-    // re-throw carries all the diagnostic a reader needs.
-    try {
-      sh('git', ['clone', '--depth', '1', `https://x-access-token:${GH_TOKEN}@github.com/${cfg.repo}.git`, repoDir],
-        { stdio: ['ignore', 'pipe', 'pipe'] });
-    } catch (e) {
-      throw new Error(`clone failed for ${cfg.repo} (exit ${e.status})`);
-    }
+    for (const note of tree.notes) console.log(`  ${note}`);
 
     const {
       loc: locByExt, generatedSkipped, binarySkipped, testFilesSkipped,
     } = countLocByExtension(repoDir);
     const { measured, unmeasured, skippedImmaterial } = discoverLanguages(locByExt);
     if (measured.length === 0) {
-      throw new Error(`no material language found in ${cfg.repo} — refusing to write a meta that would score 0/0`);
+      throw new Error(`no material language found in ${tree.label} — refusing to write a meta that would score 0/0`);
+    }
+
+    // Check every complexity tool is present BEFORE running any of them. Since
+    // the action installs Elixir and Ruby only when a system declares those
+    // stacks, a repository whose material languages differ from its declared
+    // stack now arrives without the tool it needs — and the bare ENOENT that
+    // produces names `mix`, not the declaration that is missing.
+    //
+    // Up front rather than at each call so a repo missing two toolchains is told
+    // about both, and so it fails before ten minutes of jscpd and lizard.
+    const absent = missingToolchains(
+      measured,
+      (binary) => spawnSync(binary, ['--version'], { stdio: 'ignore' }).error === undefined,
+    );
+    if (absent.length > 0) {
+      throw new Error(missingToolchainMessage(absent, { systemKey: SYSTEM, declaredStack: stack }));
     }
 
     const gateInputs = readGateInputs(repoDir);
@@ -346,7 +360,7 @@ function main() {
         // If Vue is material but every extraction failed, the extractor is broken —
         // do not silently write a meta claiming Vue was measured when nothing was.
         if (Object.keys(vue.offsets).length === 0) {
-          throw new Error(`Vue was discovered as material in ${cfg.repo} but zero <script> blocks could be extracted — extractor broken, refusing to write a false meta`);
+          throw new Error(`Vue was discovered as material in ${tree.label} but zero <script> blocks could be extracted — extractor broken, refusing to write a false meta`);
         }
         writeJson(outDir, 'vue-offsets', vue.offsets);
         // The extraction tree is MIXED: a `lang="ts"` block is written as
@@ -390,9 +404,9 @@ function main() {
       vue_extraction_failures: vue ? vue.failed : 0,
       loc: languages.reduce((a, l) => a + l.loc, 0),
     });
-    console.log(`Scanned C8 ${SYSTEM} (${cfg.repo}) — ${languages.map((l) => `${l.language}:${l.tool}`).join(' ')} + jscpd`);
+    console.log(`Scanned C8 ${SYSTEM} (${tree.label}) — ${languages.map((l) => `${l.language}:${l.tool}`).join(' ')} + jscpd`);
   } finally {
-    fs.rmSync(work, { recursive: true, force: true });
+    tree.cleanup();
   }
 }
 

@@ -16,8 +16,9 @@ stores and shows them.
 ## The scanner
 
 **Headless by design.** The engine never compiles, installs, or runs the code it
-measures. It reads source, manifests, configuration and git history on a shallow
-clone. That is what lets it score a repository it knows nothing about.
+measures. It reads source, manifests, configuration and git history — on a
+shallow clone, or on a copy of a folder on your own machine. That is what lets
+it score a repository it knows nothing about.
 
 ## What it measures
 
@@ -63,8 +64,10 @@ it is calibrated against travel as one unit. A caller one version behind on any
 scanner produces numbers that look comparable and are not.
 
 ```yaml
-- uses: mindvalley/watchtower-engine@v0
+- uses: mindvalley/watchtower@v1
   id: engine
+  with:
+    config: config/systems.json
 
 - run: node "${{ steps.engine.outputs.engine-path }}/scripts/benchmark/scan-security.js"
   env:
@@ -73,6 +76,29 @@ scanner produces numbers that look comparable and are not.
     WATCHTOWER_CONFIG: config/systems.json
     WATCHTOWER_REPORTS: reports
 ```
+
+### Toolchains are installed from what you declare
+
+Most of what the action installs is language-agnostic and runs on every scan.
+Two things are not:
+
+| Toolchain | Used for | Installed when |
+|---|---|---|
+| Elixir + OTP | Credo (complexity on Elixir source), and the AST helpers the C2 reader uses on Elixir systems | a system declares `"stack": "elixir"` |
+| Ruby | Rubocop (complexity on Ruby source) | a system declares `"stack": "ruby"` |
+
+Point the `config` input at your configuration and the action reads it before
+installing anything. A fleet with no Elixir in it never builds the BEAM
+toolchain. If the configuration cannot be read, or a system declares no stack,
+everything is installed — an unreadable input must not quietly become a smaller
+scan.
+
+There is one case the configuration cannot express. Complexity is measured in
+**every language the repository materially contains**, not the one it is
+declared as, so a repository declared `typescript` that also holds a few
+thousand lines of Ruby needs Rubocop. That scan fails and says so rather than
+scoring the Ruby clean; `install-ruby: true` (or `install-elixir: true`) forces
+the toolchain in without misdeclaring the stack.
 
 ### Configuration
 
@@ -91,6 +117,43 @@ reports no findings, which reads exactly like a clean result.
 
 Credentials in the config file are refused outright — it is the one file that
 gets committed.
+
+### What a system points at
+
+Each system declares `repo` **or** `path`. Exactly one; both is refused rather
+than resolved, because it is two answers to one question.
+
+```jsonc
+{
+  "systems": {
+    "billing": { "repo": "org/billing",  "stack": "elixir" },  // clone from GitHub
+    "web":     { "path": "code/web",     "stack": "typescript" }  // a folder here
+  }
+}
+```
+
+A relative `path` is resolved against **the directory holding the config**, not
+the working directory, so the same config means the same thing wherever you run
+it from. `GH_TOKEN` is only needed for a `repo`.
+
+Local targets are what make a scan usable before you push. Run it on the code in
+front of you rather than on whatever is currently on the remote's default
+branch.
+
+**A local folder is copied before it is read, never scanned in place.** The scan
+writes into the tree it reads — graphify leaves a `graphify-out/` directory — and
+nothing here is going to leave build output inside your working copy. What
+travels is what git carries: tracked files plus untracked ones no ignore rule
+covers, uncommitted edits included. `node_modules`, build directories and
+anything else ignored stay behind, which is what keeps a local run comparable to
+a CI one. Symlinks are skipped and counted rather than followed.
+
+Change coupling needs a commit log, and the copy has no `.git`; it is read from
+the source folder instead, read-only. A folder that is not a git repository is
+still scannable — the copy falls back to a fixed list of build directories to
+skip, and change coupling reports itself unmeasured rather than clean.
+
+The temp copy is always removed afterwards, and only ever the copy.
 
 ### Where the results go
 
@@ -124,5 +187,7 @@ exercise Elixir AST helpers and are skipped when Elixir is absent.
 ## Status
 
 Used in production by Mindvalley across three organisations. Open-sourcing
-properly — setup guide, configurable triage filters, dropping the Elixir
-prerequisite — is intended but not yet done.
+properly — setup guide, configurable triage filters — is intended but not yet
+done. The Elixir prerequisite is gone for anyone who does not declare the
+stack; the two AST helpers that need the runtime at all are still there, and
+replacing them with tree-sitter would remove it entirely.
