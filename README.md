@@ -1,7 +1,19 @@
-# Watchtower Engine
+# Watchtower
 
-Scans a repository and scores it against the Agentic Compatibility Benchmark —
-how safely an AI agent can work in a codebase.
+Two halves of one thing: a **scanner** that scores a repository against the
+Agentic Compatibility Benchmark — how safely an AI agent can work in a codebase
+— and a **dashboard** that shows the results for a fleet of them.
+
+- The scanner is this repository's root, and a GitHub composite action:
+  `uses: mindvalley/watchtower@v1`. Everything below describes it.
+- The dashboard is [`dashboard/`](dashboard/), a Node web server you can run on
+  one machine with Docker, or behind whatever hosts things for you. It has its
+  own README.
+
+You can use either without the other. The scanner writes results; the dashboard
+stores and shows them.
+
+## The scanner
 
 **Headless by design.** The engine never compiles, installs, or runs the code it
 measures. It reads source, manifests, configuration and git history on a shallow

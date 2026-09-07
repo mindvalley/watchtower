@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Criterion — Agent Watchtower</title>
+<meta name="description" content="Agentic Compatibility Benchmark criterion — what it measures, why it exists, how it is assessed, and its triage nuances.">
+<meta name="color-scheme" content="dark">
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="icon" href="/img/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<script src="/js/loading.js"></script>
+</head>
+<body>
+<div class="page">
+
+  <a href="/criteria" class="back-link">← All criteria</a>
+
+  <main id="detail">
+    <!-- populated by JS -->
+  </main>
+
+  <footer class="footer">
+    <span>Agentic Compatibility Benchmark</span>
+    <span id="footer-note"></span>
+  </footer>
+
+</div>
+<script>
+const STATUS_CLASS = { scored: 'status-scored', pending: 'status-pending' };
+
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function block(label, html) {
+  return `<div class="crit-block"><div class="crit-block-label">${label}</div>${html}</div>`;
+}
+
+// Slug from the path: /criteria/test-coverage -> "test-coverage"
+function currentSlug() {
+  return location.pathname.split('/').filter(Boolean).pop() || '';
+}
+
+// prev/next are the neighbouring criteria objects (or null/undefined).
+function renderDetail(c, prev, next) {
+  const statusClass = STATUS_CLASS[c.status] || 'status-pending';
+  const how = c.how || {};
+  const howRows = [
+    how.tools ? `<div class="crit-how-row"><span class="k">Tools · </span>${esc(how.tools)}</div>` : '',
+    how.anchors ? `<div class="crit-how-row"><span class="k">Anchor · </span>${esc(how.anchors)}</div>` : '',
+    how.scoring ? `<div class="crit-how-row"><span class="k">Scoring · </span>${esc(how.scoring)}</div>` : '',
+  ].join('');
+  const nuances = (c.nuances || []).map((n) => `
+    <div class="crit-nuance">
+      <div class="crit-nuance-title">${esc(n.title)}</div>
+      <div class="crit-nuance-detail">${esc(n.detail)}</div>
+    </div>`).join('');
+
+  const nav = `
+    <div class="crit-nav">
+      ${prev ? `<a href="/criteria/${prev.slug}">← ${esc(prev.name)}</a>` : '<span class="spacer"></span>'}
+      ${next ? `<a href="/criteria/${next.slug}" style="text-align:right">${esc(next.name)} →</a>` : '<span class="spacer"></span>'}
+    </div>`;
+
+  return `
+    <header class="header">
+      <div>
+        <div class="header-title">${esc(c.name)}</div>
+        <div class="header-sub">Agentic Compatibility Benchmark</div>
+      </div>
+      <div class="header-badge"><span class="status-chip ${statusClass}">${esc(c.status)}</span></div>
+    </header>
+    <section class="panel">
+      <div class="crit-one-liner">${esc(c.one_liner)}</div>
+      ${c.what ? block('What it measures', `<p>${esc(c.what)}</p>`) : ''}
+      ${c.why ? block('Why it exists', `<p>${esc(c.why)}</p>`) : ''}
+      ${howRows.trim() ? block('How it is assessed', `<div class="crit-how">${howRows}</div>`) : ''}
+      ${nuances ? block('Nuances &amp; adjustments', nuances) : ''}
+      ${c.last_reviewed ? `<div class="crit-updated">Last reviewed ${esc(c.last_reviewed)}</div>` : ''}
+    </section>
+    ${nav}`;
+}
+
+async function init() {
+  try {
+    const data = await Loading.withLoading(
+      document.getElementById('detail'),
+      'Loading criterion…',
+      () => Loading.getJson('/data/criteria-docs.json'),
+    );
+    const criteria = data.criteria || [];
+    const slug = currentSlug();
+    const i = criteria.findIndex((c) => c.slug === slug);
+    if (i === -1) {
+      document.getElementById('detail').innerHTML =
+        '<div class="panel"><p style="color:var(--text-muted)">Unknown criterion. <a href="/criteria">Back to all criteria →</a></p></div>';
+      return;
+    }
+    const c = criteria[i];
+    document.title = `${c.name} — Agent Watchtower`;
+    document.getElementById('detail').innerHTML =
+      renderDetail(c, criteria[i - 1], criteria[i + 1]);
+    if (data.last_updated) {
+      document.getElementById('footer-note').textContent = `Reference updated ${data.last_updated}`;
+    }
+  } catch (e) {
+    console.error('Failed to load criteria docs:', e);
+    document.getElementById('detail').innerHTML =
+      '<div class="panel"><p style="color:var(--text-muted)">Could not load criterion.</p></div>';
+  }
+}
+
+init();
+</script>
+</body>
+</html>

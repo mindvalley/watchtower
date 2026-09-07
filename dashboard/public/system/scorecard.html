@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Agentic compatibility scorecard.">
+<meta name="color-scheme" content="dark">
+<!-- Title, heading and footer are filled in from the board once it loads. There
+     used to be one of these files per system — eleven of them, identical apart
+     from five lines — which meant the filenames were a list of who we measure,
+     and a twelfth system got a "not found" until somebody wrote HTML. -->
+<title>Agentic Compatibility</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="icon" href="/img/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<script src="/js/loading.js"></script>
+<script src="/js/criteria.js"></script>
+</head>
+<body>
+<div class="page">
+
+  <a href="/" class="back-link">← Agent Watchtower</a>
+
+  <!-- Filled in by scorecard.js; empty and hidden until it has something to say. -->
+  <div id="page-banner" class="page-banner" style="display:none">
+    <span class="page-banner-icon">⚠</span>
+    <span id="page-banner-text"></span>
+  </div>
+
+  <header class="header">
+    <div>
+      <div class="header-title" id="header-title">&nbsp;</div>
+      <div class="header-sub" id="header-sub">&nbsp;</div>
+    </div>
+    <div id="score-badge" class="header-badge">Loading...</div>
+  </header>
+
+  <main>
+  <section class="section">
+    <div class="section-label">Round 1 Criteria — Agentic Compatibility</div>
+    <div class="panel">
+      <table class="criteria-table">
+        <thead>
+          <tr>
+            <th style="width:32px">#</th>
+            <th>Criterion</th>
+            <th style="width:80px;text-align:center">Score</th>
+            <th>Key findings</th>
+          </tr>
+        </thead>
+        <tbody id="criteria-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section" id="remediation-section" style="display:none">
+    <div class="section-label">Priority remediation actions</div>
+    <div class="panel" id="remediation-panel"></div>
+  </section>
+
+  </main>
+  <footer class="footer">
+    <span id="footer-name">Agentic Compatibility Benchmark</span>
+    <span id="footer-date"></span>
+  </footer>
+
+</div>
+<script src="/system/scorecard.js"></script>
+<script>initScorecard(systemKeyFromPath());</script>
+</body>
+</html>

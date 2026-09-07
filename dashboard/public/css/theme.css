@@ -1,0 +1,777 @@
+/* Self-hosted Geist (OFL) — no external CDN dependency. Files in /fonts. */
+@font-face { font-family: 'Geist'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/geist-sans-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Geist'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/geist-sans-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Geist'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/geist-sans-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Geist'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/geist-sans-latin-700-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Geist Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/geist-mono-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Geist Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/geist-mono-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Geist Mono'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/geist-mono-latin-600-normal.woff2') format('woff2'); }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #21262d;
+    --border: #30363d;
+    --border-soft: #262c36;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --amber: #d29922;
+    --purple: #bc8cff;
+    --red: #f85149;
+
+    /* Type */
+    --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    --font-mono: 'Geist Mono', ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+
+    /* Type scale.
+       The base was already 15px and almost every component overrode it
+       downwards — 10, 11, 12, 12.5, 13, 13.5px — which is an accumulation
+       rather than a scale, and it made the whole site read small. These are
+       the only sizes now in use; the floor is 12px, and nothing sets a
+       font-size in px directly.
+       Sizes are in rem so the browser's own font-size setting still scales
+       the page; 1rem = 16px by default, which is where --fs-body lands. */
+    --fs-micro: 0.75rem;    /* 12px — chips, badges, table headers, footer */
+    --fs-xs:    0.8125rem;  /* 13px — card subtitles, inline links, meta */
+    --fs-sm:    0.875rem;   /* 14px — table body, secondary prose */
+    --fs-body:  1rem;       /* 16px — default body copy */
+    --fs-md:    1.0625rem;  /* 17px — card titles, criterion names */
+    --fs-lg:    1.25rem;    /* 20px — sub-headings */
+    --fs-xl:    1.875rem;   /* 30px — page title */
+    --fs-score: 2rem;       /* 32px — system composite */
+    --fs-stat:  2.25rem;    /* 36px — agent stat */
+    --fs-hero:  2.75rem;    /* 44px — hero figure */
+
+    /* Tinted shadows — carry the background hue, never pure black */
+    --shadow-sm: 0 1px 2px rgba(1, 4, 9, 0.45);
+    --shadow-md: 0 6px 16px -4px rgba(1, 4, 9, 0.55), 0 2px 5px -2px rgba(1, 4, 9, 0.45);
+    --shadow-lg: 0 16px 40px -12px rgba(1, 4, 9, 0.65);
+
+    /* Radii — softer on containers, tighter inside */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background-color: var(--bg);
+    background-image: radial-gradient(1100px 520px at 50% -8%, rgba(88, 166, 255, 0.06), transparent 72%);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: var(--fs-body);
+    line-height: 1.6;
+    min-height: 100dvh;
+    padding: 40px 32px 80px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Subtle grain overlay — breaks digital flatness without reading as a pattern */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.022;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  a { color: var(--accent); text-decoration: none; transition: color 0.15s var(--ease); }
+  a:hover { text-decoration: underline; }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  /* ── Layout ── */
+  .page { max-width: 1440px; margin: 0 auto; position: relative; z-index: 1; }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 36px;
+    gap: 16px;
+  }
+  /* Logo lockup. The mark is an app-icon tile whose own corners are
+     transparent, so it sits on the page background rather than in a box.
+     It pairs with the title line only — spanning the subtitle as well made it
+     a block beside two lines rather than a mark on a wordmark. */
+  .header-lockup { display: flex; align-items: center; gap: 11px; }
+  .header-logo { display: block; flex-shrink: 0; width: 34px; height: 34px; }
+  .header-title {
+    font-size: var(--fs-xl);
+    font-weight: 600;
+    /* Tighter than the body's 1.6 so the line box is the height of the text,
+       which is what the logo is being matched to. */
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+  .header-sub { color: var(--text-muted); margin-top: 4px; font-size: var(--fs-body); }
+  .header-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+    margin-top: 4px;
+    box-shadow: var(--shadow-sm);
+  }
+  .pulse {
+    width: 8px; height: 8px;
+    background: var(--green);
+    border-radius: 50%;
+    box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.5);
+    animation: pulse 2.4s infinite;
+  }
+  @keyframes pulse {
+    0%   { opacity: 1; box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.45); }
+    50%  { opacity: 0.4; box-shadow: 0 0 0 5px rgba(63, 185, 80, 0); }
+    100% { opacity: 1; box-shadow: 0 0 0 0 rgba(63, 185, 80, 0); }
+  }
+
+  /* ── Entry motion ── */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: none; }
+  }
+  .header { animation: rise 0.5s var(--ease) both; }
+  .section { animation: rise 0.5s var(--ease) both; }
+  .section:nth-of-type(1) { animation-delay: 0.05s; }
+  .section:nth-of-type(2) { animation-delay: 0.11s; }
+  .section:nth-of-type(3) { animation-delay: 0.17s; }
+  .section:nth-of-type(4) { animation-delay: 0.23s; }
+  .section:nth-of-type(5) { animation-delay: 0.29s; }
+
+  /* ── Section ── */
+  .section { margin-bottom: 40px; }
+  .section-label {
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+  }
+
+  /* ── Hero stats ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), transform 0.2s var(--ease);
+  }
+  .stat-card:hover { box-shadow: var(--shadow-md); }
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+  .stat-card.impact::before { background: var(--green); }
+  .stat-card.activity::before { background: var(--accent); }
+  .stat-card.scale::before { background: var(--purple); }
+
+  .stat-number {
+    font-family: var(--font-mono);
+    font-size: var(--fs-hero);
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 6px;
+  }
+  .stat-card.impact .stat-number { color: var(--green); }
+  .stat-card.activity .stat-number { color: var(--accent); }
+  .stat-card.scale .stat-number { color: var(--purple); }
+
+  .stat-label {
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .stat-sub { font-size: var(--fs-xs); color: var(--text-muted); }
+
+  /* ── Two-column ── */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+
+  /* ── Panel ── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    box-shadow: var(--shadow-sm);
+  }
+  .panel-title {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 16px;
+  }
+
+  /* ── Trend chart ── */
+  .trend-row {
+    display: grid;
+    grid-template-columns: 70px 1fr 56px;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .trend-row:last-child { margin-bottom: 0; }
+  .trend-date { font-size: var(--fs-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .trend-bar-wrap {
+    background: var(--surface-2);
+    border-radius: 3px;
+    height: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .trend-bar {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.8s var(--ease);
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+    font-size: var(--fs-micro);
+    font-weight: 500;
+  }
+  .trend-pct {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .trend-row.historical .trend-bar { background: rgba(248,81,73,0.5); }
+  .trend-row.historical .trend-pct { color: var(--red); }
+  .trend-row.improving .trend-bar { background: rgba(210,153,34,0.5); }
+  .trend-row.improving .trend-pct { color: var(--amber); }
+  .trend-row.current .trend-bar { background: rgba(63,185,80,0.6); }
+  .trend-row.current .trend-pct { color: var(--green); }
+
+  .trend-arrow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: var(--fs-xs);
+    color: var(--green);
+    font-weight: 500;
+  }
+
+  /* ── OKR coverage ── */
+  .okr-progress {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .okr-dot {
+    flex: 1;
+    height: 10px;
+    border-radius: 2px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+  }
+  .okr-dot.live { background: var(--green); border-color: var(--green); }
+  .okr-dot.scheduled { background: rgba(88,166,255,0.4); border-color: var(--accent); }
+
+  .okr-apps { display: flex; flex-direction: column; gap: 8px; }
+  .okr-app {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: var(--fs-xs);
+  }
+  .okr-app-name { color: var(--text); font-weight: 500; }
+  .okr-chip {
+    font-size: var(--fs-micro);
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+  .chip-live { background: rgba(63,185,80,0.15); color: var(--green); }
+  .chip-next { background: rgba(88,166,255,0.12); color: var(--accent); }
+  .chip-pending { background: rgba(139,148,158,0.12); color: var(--text-muted); }
+  .chip-target { background: rgba(188,140,255,0.12); color: var(--purple); }
+
+  .okr-legend {
+    display: flex;
+    gap: 16px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: var(--fs-micro);
+    color: var(--text-muted);
+  }
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 2px;
+    display: inline-block;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+
+  /* ── Run history table ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fs-xs);
+  }
+  thead th {
+    text-align: left;
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 0 12px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  thead th:first-child { padding-left: 0; }
+  tbody tr { border-bottom: 1px solid var(--border-soft); transition: background 0.15s var(--ease); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(177, 186, 196, 0.04); }
+  tbody td {
+    padding: 10px 12px;
+    vertical-align: middle;
+    color: var(--text);
+  }
+  tbody td:first-child { padding-left: 0; }
+  .td-muted { color: var(--text-muted); }
+  .td-date { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .run-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--fs-micro);
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+  .status-done { background: rgba(63,185,80,0.12); color: var(--green); }
+  .status-review { background: rgba(210,153,34,0.12); color: var(--amber); }
+  .status-early { background: rgba(139,148,158,0.1); color: var(--text-muted); }
+
+  /* ── Pattern library ── */
+  .patterns-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .pattern-item {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .pattern-num {
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    color: var(--accent);
+    min-width: 18px;
+    margin-top: 1px;
+  }
+  .pattern-name { font-size: var(--fs-xs); color: var(--text); font-weight: 500; }
+  .pattern-lang { font-size: var(--fs-micro); color: var(--text-muted); margin-top: 1px; }
+
+  /* ── Footer ── */
+  .footer {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: var(--fs-micro);
+    color: var(--text-muted);
+  }
+
+/* === ADDITIONS FOR OVERVIEW PAGE === */
+
+/* Section header with optional notice */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.section-header .section-label { margin-bottom: 0; }
+.example-notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  color: var(--amber);
+  background: rgba(210,153,34,0.1);
+  border: 1px solid rgba(210,153,34,0.3);
+  border-radius: 20px;
+  padding: 3px 12px;
+  white-space: nowrap;
+}
+
+/* System cards */
+.system-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px 18px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  text-decoration: none;
+  display: block;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), transform 0.2s var(--ease);
+}
+.system-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.system-card:active { transform: translateY(0); box-shadow: var(--shadow-sm); }
+.system-card-top {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+.system-name { font-weight: 600; color: var(--text); margin-bottom: 4px; font-size: var(--fs-md); }
+.system-sub  { font-size: var(--fs-xs); color: var(--text-muted); margin-bottom: 16px; }
+.system-score { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }
+.score-num   { font-family: var(--font-mono); font-size: var(--fs-score); font-weight: 600; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.score-denom { font-size: var(--fs-sm); color: var(--text-muted); }
+.system-link { font-size: var(--fs-xs); color: var(--accent); margin-top: 12px; }
+
+/* Band label beside the score.
+   A status colour must never carry meaning on its own — measured, not assumed:
+   this palette's green and amber sit ΔE 5.1 apart under protanopia, below even
+   the floor that secondary encoding makes legal, so a red/green colourblind
+   reader cannot separate them. The word is the channel that always works. */
+.score-band {
+  margin-left: auto;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  padding: 2px 7px;
+  align-self: center;
+}
+.band-green { color: var(--green); background: rgba(63,185,80,0.13);  border: 1px solid rgba(63,185,80,0.32); }
+.band-amber { color: var(--amber); background: rgba(210,153,34,0.13); border: 1px solid rgba(210,153,34,0.32); }
+.band-red   { color: var(--red);   background: rgba(248,81,73,0.13);  border: 1px solid rgba(248,81,73,0.32); }
+
+/* Why the card is the colour it is, and where to look. Two readings, because
+   every capped system on the board caps on the same criterion at the same
+   score — so the cap line alone would be identical on most of the grid. */
+.system-why {
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+  min-height: 3em;
+}
+.system-why strong { color: var(--text); font-weight: 600; }
+/* The criterion and its score are one fact — never split across lines. */
+.why-name { white-space: nowrap; }
+.why-score { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.why-cap { color: var(--red); font-weight: 600; }
+.why-more { opacity: 0.75; }
+.why-weakest { margin-top: 1px; }
+
+.dot {
+  display: inline-block;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot-empty { background: var(--surface-2); border: 1px solid var(--border); }
+.score-green { color: var(--green); }
+.score-amber { color: var(--amber); }
+.score-red   { color: var(--red); }
+
+/* Agent cards */
+.agent-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), transform 0.2s var(--ease);
+}
+.agent-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.agent-card:active { transform: translateY(0); box-shadow: var(--shadow-sm); }
+.agent-label { font-size: var(--fs-xs); color: var(--text-muted); margin-bottom: 4px; }
+.agent-stat  { font-family: var(--font-mono); font-size: var(--fs-stat); font-weight: 600; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.agent-sub   { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 4px; }
+.detail-link { font-size: var(--fs-xs); color: var(--accent); white-space: nowrap; }
+
+.stat-green  { color: var(--green); }
+.stat-amber  { color: var(--amber); }
+.stat-purple { color: var(--purple); }
+
+/* System/agent grids */
+/* auto-fill, not auto-fit: three systems in an org keep the same card width as
+   five, rather than stretching to fill the row and reading as a different size. */
+.systems-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-bottom: 0; }
+.agents-grid  { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+
+/* Back link */
+.back-link { font-size: var(--fs-xs); color: var(--accent); text-decoration: none; display: inline-block; margin-bottom: 20px; transition: transform 0.15s var(--ease); }
+.back-link:hover { text-decoration: underline; }
+.back-link:hover { transform: translateX(-2px); }
+
+/* Criteria table */
+.criteria-table { width: 100%; border-collapse: collapse; }
+.criteria-table th {
+  text-align: left; padding: 6px 12px 10px 0;
+  font-size: var(--fs-micro); font-weight: 600; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+.criteria-table td { padding: 12px 12px 12px 0; border-bottom: 1px solid var(--surface-2); vertical-align: top; }
+/* The criterion column takes whatever the findings column leaves, which at the
+   larger type broke "Clear Domain Boundaries" across two lines and pushed its
+   badge onto a third. */
+.criteria-table th:nth-child(2), .criteria-table td:nth-child(2) { min-width: 210px; }
+.criteria-table tr:last-child td { border-bottom: none; }
+.criterion-name  { font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.criterion-findings { font-size: var(--fs-micro); color: var(--text-muted); }
+.na-text { color: var(--text-muted); font-style: italic; font-size: var(--fs-xs); }
+
+/* Page banner — a notice above the header, filled in by the page's script.
+   It was `#example-banner`, from when its only job was an "example data"
+   warning. That warning has been unreachable for some time: the only branch
+   that shows the element replaces the text with the hard-cap message, and the
+   only other branch hides it. The name is what it does now. */
+.page-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 20px;
+  font-size: var(--fs-sm);
+  background: rgba(210,153,34,0.08);
+  border: 1px solid rgba(210,153,34,0.3);
+  color: var(--amber);
+}
+.page-banner-icon { font-size: var(--fs-md); }
+.page-banner.is-danger {
+  background: rgba(248,81,73,0.08);
+  border-color: rgba(248,81,73,0.3);
+  color: var(--red);
+}
+
+/* Pilot status badge */
+.pilot-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(63,185,80,0.12); color: var(--green);
+  border-radius: 20px; padding: 3px 10px; font-size: var(--fs-micro); font-weight: 500;
+}
+
+/* Fixer investigation table */
+.outcome-chip {
+  font-size: var(--fs-micro); font-weight: 500; padding: 2px 7px;
+  border-radius: 10px; white-space: nowrap;
+}
+.chip-draft { background: rgba(88,166,255,0.12); color: var(--accent); }
+
+/* ── Responsive ── */
+@media (max-width: 980px) {
+  /* .systems-grid needs no override — its auto-fill track sizing already drops
+     a column at a time, and a fixed count here would force cards below the
+     260px the criterion names need. */
+  .agents-grid  { grid-template-columns: 1fr; }
+}
+@media (max-width: 680px) {
+  body { padding: 24px 16px 60px; }
+  .header { flex-direction: column; }
+  .stats-grid { grid-template-columns: 1fr; }
+  .two-col { grid-template-columns: 1fr; }
+  .patterns-grid { grid-template-columns: 1fr; }
+  .header-title { font-size: var(--fs-lg); }
+}
+
+/* ── Criteria reference (index + per-criterion pages) ── */
+.status-chip {
+  display:inline-flex; align-items:center; font-size:var(--fs-micro); font-weight:700;
+  letter-spacing:.05em; text-transform:uppercase; border-radius:4px; padding:2px 8px;
+}
+.status-scored  { color:var(--green);  background:rgba(63,185,80,0.14);  border:1px solid rgba(63,185,80,0.33); }
+.status-pending { color:var(--accent); background:rgba(88,166,255,0.12); border:1px solid rgba(88,166,255,0.30); }
+
+.crit-legend { display:flex; flex-wrap:wrap; gap:16px; margin-bottom:24px; font-size:var(--fs-xs); color:var(--text-muted); }
+.crit-legend .status-chip { margin-right:6px; }
+
+/* Index list */
+.crit-list { display:flex; flex-direction:column; gap:10px; }
+.crit-list-item {
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md);
+  padding:16px 18px; text-decoration:none; display:block; box-shadow:var(--shadow-sm);
+  transition:border-color .2s var(--ease), box-shadow .2s var(--ease), transform .2s var(--ease);
+}
+.crit-list-item:hover { border-color:var(--accent); transform:translateY(-2px); box-shadow:var(--shadow-md); text-decoration:none; }
+.crit-list-item:active { transform:translateY(0); box-shadow:var(--shadow-sm); }
+.crit-list-item.is-removed { opacity:0.8; }
+.crit-list-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:6px; }
+.crit-list-arrow { margin-left:auto; font-size:var(--fs-xs); color:var(--accent); }
+.crit-list-desc { font-size:var(--fs-xs); color:var(--text-muted); line-height:1.5; }
+
+/* Shared criterion typography */
+.crit-id { font-family:var(--font-mono); font-size:var(--fs-sm); font-weight:600; color:var(--text-muted); }
+.crit-name { font-size:var(--fs-md); font-weight:600; color:var(--text); letter-spacing:-0.01em; }
+.crit-one-liner { color:var(--text-muted); font-size:var(--fs-sm); margin-bottom:4px; line-height:1.55; }
+
+/* Detail page */
+.crit-detail-head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+.crit-block { margin-top:18px; }
+.crit-block-label {
+  font-size:var(--fs-micro); font-weight:700; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--text-muted); margin-bottom:6px;
+}
+.crit-block p { font-size:var(--fs-sm); line-height:1.6; color:var(--text); }
+.crit-how { display:flex; flex-direction:column; gap:8px; }
+.crit-how-row { font-size:var(--fs-sm); line-height:1.55; }
+.crit-how-row .k { color:var(--text-muted); }
+.crit-nuance {
+  background:var(--surface-2); border:1px solid var(--border);
+  border-radius:var(--radius-sm); padding:12px 14px; margin-top:8px;
+}
+.crit-nuance-title { font-size:var(--fs-xs); font-weight:600; color:var(--text); margin-bottom:4px; }
+.crit-nuance-detail { font-size:var(--fs-xs); line-height:1.6; color:var(--text-muted); }
+.crit-updated { font-size:var(--fs-micro); color:var(--text-muted); margin-top:18px; font-variant-numeric:tabular-nums; }
+
+/* Prev/next nav */
+.crit-nav { display:flex; justify-content:space-between; gap:12px; margin-top:24px; }
+.crit-nav a { font-size:var(--fs-xs); color:var(--accent); max-width:48%; }
+.crit-nav .spacer { flex:1; }
+
+/* ── Loading + failure states ── */
+
+/* Page-level strip. Every page fetches its data client-side, and the agent
+   detail views populate dozens of small fields rather than one region, so
+   there is no single container to fill on those — the strip covers them all. */
+.load-strip {
+  position: fixed; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transition: opacity 0.2s var(--ease);
+  pointer-events: none;
+  z-index: 50;
+}
+.load-strip.is-active { opacity: 1; animation: strip-sweep 1.1s var(--ease) infinite; }
+@keyframes strip-sweep {
+  from { background-position: -40% 0; }
+  to   { background-position: 140% 0; }
+}
+
+/* In-container indicator, for the pages with a large region that would
+   otherwise sit empty (the board grids, the criteria list, a findings report). */
+.loading {
+  display: flex; align-items: center; gap: 10px;
+  padding: 28px 4px;
+  font-size: var(--fs-sm); color: var(--text-muted);
+}
+
+/* Prepended above the content on pages that fill many small fields rather than
+   one region — a 2px strip alone is too thin to read as "this is loading". */
+.loading-banner .loading {
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+.loading-ring {
+  width: 14px; height: 14px; flex-shrink: 0;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: ring-spin 0.7s linear infinite;
+}
+@keyframes ring-spin { to { transform: rotate(360deg); } }
+
+.load-error {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px;
+  padding: 14px 16px; margin-bottom: 16px;
+  background: var(--surface);
+  border: 1px solid var(--red);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  font-size: var(--fs-sm);
+}
+.load-error-title { font-weight: 600; color: var(--red); }
+.load-error-detail { color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-xs); }
+.load-error-retry {
+  margin-left: auto;
+  font-family: inherit; font-size: var(--fs-xs); font-weight: 600;
+  color: var(--accent); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 5px 12px; cursor: pointer;
+  transition: border-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+.load-error-retry:hover { border-color: var(--accent); }
+
+/* ── Respect reduced-motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* The global rule above freezes an animation rather than stopping it, which
+     would leave a spinner stuck mid-rotation reading as a hang. Drop the moving
+     parts entirely — the label alone carries the meaning, and it is what a
+     screen reader gets in either case. */
+  .loading-ring { display: none; }
+  .load-strip.is-active { opacity: 1; background: var(--accent); background-size: 100% 100%; }
+}

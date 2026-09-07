@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Watchtower</title>
+<meta name="description" content="Agentic compatibility scores and movement over time for every system under watch.">
+<meta name="color-scheme" content="dark">
+<meta property="og:title" content="Agent Watchtower">
+<meta property="og:description" content="Agentic compatibility scores and movement over time for every system under watch.">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="icon" href="/img/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<style>
+  /* ── Organisation tabs ──
+     One tab per organisation, built from the data. The page used to carry its
+     own copy of the whole fleet — every system key, label and org, as literal
+     arrays — which is "what we measure" sitting in a file bound for a public
+     repo. The org now arrives on each system in benchmark.json. */
+  .org-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+    /* Scrolls when there are more organisations than fit, but never draws the
+       bar — an always-visible track sat inside the strip and read as a stray
+       rule under the tabs. */
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .org-tabs::-webkit-scrollbar { display: none; }
+  .org-tab {
+    appearance: none;
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    padding: 10px 16px;
+    margin-bottom: -1px;
+    white-space: nowrap;
+    transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
+  }
+  .org-tab:hover { color: var(--text); }
+  .org-tab[aria-selected="true"] {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+  .org-panel[hidden] { display: none; }
+
+  /* ── Score card ──
+     PageSpeed's shape: a ring that fills by score with the number in the middle,
+     the one thing to do underneath, and the per-criterion breakdown one click
+     away rather than on the face.
+
+     Class names are prefixed. theme.css has no namespacing convention and
+     already owns `.crit-name` and `.crit-list` for the criteria pages — an
+     earlier version of this reused them and silently inherited another page's
+     type scale. */
+  .wt-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+  .wt-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+  .wt-body { padding: 15px 18px 14px; }
+  .wt-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .wt-name { font-size: var(--fs-md); font-weight: 600; color: var(--text); }
+  .wt-stack { font-size: var(--fs-micro); color: var(--text-muted); font-family: var(--font-mono); }
+  .wt-fig { display: flex; align-items: center; gap: 14px; margin-top: 12px; }
+  .wt-ring { flex: none; }
+  .wt-ring-num {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  /* The delta is carried by the sign and the number; colour only reinforces.
+     A strip encoded by colour alone was built and removed here once, because
+     this palette's green and amber sit 5.1 ΔE apart under protanopia. */
+  .wt-delta { font-size: var(--fs-xs); font-variant-numeric: tabular-nums; color: var(--text-muted); }
+  .wt-up { color: var(--green); font-weight: 600; }
+  .wt-down { color: var(--red); font-weight: 600; }
+
+  .wt-red { color: var(--red); }
+  .wt-amber { color: var(--amber); }
+  .wt-green { color: var(--green); }
+
+  /* Action: the criterion, then what to do. No explanation — the severity badge
+     carries the rest. If a card has to explain itself it has already failed. */
+  .wt-action { border-top: 1px solid var(--border-soft); padding: 11px 18px 13px; }
+  .wt-action-line { display: flex; align-items: center; gap: 8px; }
+  .wt-action-crit { font-size: var(--fs-xs); font-weight: 600; color: var(--text); }
+  .wt-action-do {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    margin-top: 3px;
+    line-height: 1.45;
+  }
+  .wt-sev {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border-radius: 3px;
+    padding: 1px 6px;
+    white-space: nowrap;
+    margin-left: auto;
+  }
+  .wt-sev-critical { background: var(--red); color: #0d1117; }
+  .wt-sev-high { background: var(--amber); color: #0d1117; }
+  .wt-sev-medium { border: 1px solid var(--text-muted); color: var(--text-muted); }
+
+  /* Expander */
+  details.wt-expand { border-top: 1px solid var(--border-soft); }
+  details.wt-expand > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 9px 18px;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+  }
+  details.wt-expand > summary::-webkit-details-marker { display: none; }
+  details.wt-expand > summary::after {
+    content: '›';
+    font-size: 1.25rem;
+    line-height: 0.7;
+    transition: transform 0.15s var(--ease);
+  }
+  details.wt-expand[open] > summary::after { transform: rotate(90deg); }
+  details.wt-expand > summary:hover { color: var(--text); }
+  .wt-brk { padding: 2px 18px 14px; }
+  .wt-brk-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border-soft);
+    font-size: var(--fs-xs);
+  }
+  .wt-brk-row:last-of-type { border-bottom: 0; }
+  .wt-brk-name { flex: 1; color: var(--text); }
+  .wt-brk-bar { width: 54px; height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
+  .wt-brk-bar span { display: block; height: 100%; }
+  .wt-brk-score {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    min-width: 26px;
+    text-align: right;
+  }
+  .wt-brk-na { color: var(--text-muted); font-size: var(--fs-micro); font-weight: 400; }
+  .wt-brk-ref { display: block; margin-top: 10px; font-size: var(--fs-micro); color: var(--accent); }
+
+  /* The band legend is the non-colour encoding for the ring. The band word used
+     to sit on every card; one legend under the grid says the same thing once. */
+  .wt-legend {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 22px;
+    font-size: var(--fs-micro);
+    color: var(--text-muted);
+  }
+  .wt-key {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    margin-right: 6px;
+    vertical-align: -1px;
+  }
+  .wt-legend-link { margin-left: auto; color: var(--accent); }
+
+  .wt-updated { font-size: var(--fs-xs); color: var(--text-muted); }
+
+  /* ── Trends ── */
+  .wt-trend { margin-top: 34px; border-top: 1px solid var(--border-soft); padding-top: 22px; }
+  .wt-trend-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; flex-wrap: wrap; }
+  .wt-chips { margin-left: auto; display: flex; gap: 6px; }
+  .wt-chip {
+    appearance: none;
+    background: none;
+    font: inherit;
+    font-size: var(--fs-micro);
+    color: var(--text-muted);
+    padding: 4px 13px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .wt-chip:hover { color: var(--text); }
+  .wt-chip[aria-pressed="true"] {
+    color: var(--text);
+    border-color: var(--accent);
+    background: rgba(88, 166, 255, 0.07);
+  }
+
+  /* The sample marker. Amber and bordered rather than muted grey: a placeholder
+     chart that cannot be told apart from a real one is worse than no chart, and
+     this dashboard is read by people who will not know which half is which. */
+  .wt-sample {
+    font-size: var(--fs-micro);
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--amber);
+    border: 1px solid var(--amber);
+    border-radius: var(--radius-sm);
+    padding: 1px 7px;
+  }
+  .wt-sample-note {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    margin: 0 0 18px;
+    max-width: 92ch;
+  }
+
+  .wt-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+  @media (max-width: 900px) { .wt-charts { grid-template-columns: 1fr; } }
+  .wt-chart-box { min-width: 0; }
+  .wt-chart-title { font-size: var(--fs-xs); font-weight: 600; margin-bottom: 8px; }
+  .wt-chart { display: block; overflow: visible; }
+  .wt-chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    margin-top: 10px;
+    font-size: var(--fs-micro);
+    color: var(--text-muted);
+  }
+  .wt-chart-legend i {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    margin-right: 6px;
+    vertical-align: -1px;
+  }
+</style>
+<script src="/js/loading.js"></script>
+<script src="/js/criteria.js"></script>
+<!-- Invented numbers for the trend charts, and nothing else. Delete this line
+     and the file it names once the series behind those charts are real. -->
+<script src="/js/sample-trends.js"></script>
+</head>
+<body>
+<div class="page">
+
+  <header class="header">
+    <div class="header-lockup">
+      <!-- alt is empty on purpose: the wordmark beside it is the accessible
+           name, and a screen reader announcing "Agent Watchtower" twice is
+           worse than not announcing the mark at all. width/height are set so
+           the header does not reflow when the image lands. -->
+      <img src="/img/logo.png" alt="" width="34" height="34" class="header-logo">
+      <div class="header-title">Agent Watchtower</div>
+    </div>
+    <!-- A date, not a pulse. "Live · auto-updates daily" animated on a board
+         where six of eleven systems had not been measured in a fortnight, which
+         is the opposite of what it was telling the reader. -->
+    <div class="wt-updated" id="header-updated"></div>
+  </header>
+
+  <main>
+    <div class="section-header">
+      <div class="section-label">Agentic Compatibility</div>
+      <div class="example-notice" id="example-notice" style="display:none">
+        ⚠ Example data — scores illustrative, not yet assessed
+      </div>
+      <a href="/criteria" style="margin-left:auto;font-size:var(--fs-xs);color:var(--accent)">Criteria reference →</a>
+    </div>
+
+    <div class="org-tabs" role="tablist" aria-label="Organisations" id="org-tabs"></div>
+    <div id="org-panels"></div>
+
+    <!-- The Agents section (Cleaner, Fixer, Deps) is hidden for now, not
+         deleted: /cleaner, /fixer and /deps still serve, and the weekly refresh
+         still publishes their data. -->
+  </main>
+
+  <!-- No date here. The header carries it; this footer held the same fact a
+       second time. Other pages keep theirs — they have no header date. -->
+  <footer class="footer"></footer>
+
+</div>
+<script>
+// Everything is inside this function on purpose. Classic <script> tags share a
+// single global lexical scope, so a top-level `const` here can collide with one
+// in a shared file — which happened, and the browser's response is to refuse to
+// parse the second file, blanking every page while the whole Node suite passes.
+(function overview() {
+'use strict';
+
+// blue is not a band — it is the neutral series colour on the issues chart,
+// where "total" is a quantity rather than a judgement.
+const COLOURS = {
+  green: '#3fb950', amber: '#d29922', red: '#f85149', blue: '#58a6ff',
+};
+
+function esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, (m) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[m]));
+}
+
+function dot(colour) {
+  if (!colour) return '<span class="dot dot-empty"></span>';
+  return `<span class="dot" style="background:${COLOURS[colour]}"></span>`;
+}
+
+// Display names.
+//
+// The page must not carry a list of who we measure — that is the thing this
+// change exists to remove, and it is what makes the board shippable to a repo
+// that does not know our fleet. But deriving every name from its key gets them
+// wrong wherever the real name is not title case: an acronym comes back as a
+// word, and a trailing initialism comes back capitalised like a surname.
+//
+// So: derive by default, and let an OPTIONAL file override the casing. Absent
+// file means derived names and a page that still works — the same asymmetry as
+// the allowances list, where allowing nothing is the ordinary state. The file
+// is private side, because it names who we measure.
+let NAMES = { orgs: {}, systems: {} };
+
+function titleise(key) {
+  return String(key).split(/[-_]/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+function displayName(key) {
+  return (NAMES.systems && NAMES.systems[key]) || titleise(key);
+}
+
+function orgLabel(org) {
+  return (NAMES.orgs && NAMES.orgs[org]) || titleise(org);
+}
+
+// ── Score card ───────────────────────────────────────────────────────────────
+
+const RED_MAX = 40;
+const AMBER_MAX = 70;
+
+// The colour is derived, never read off the payload. Until 2026-08-27 the two
+// were separate — a Critical forced the badge red without touching the number —
+// and 59 of the 115 readings we had published showed a colour their own score
+// contradicted. The engine fixed the rule; deriving it here as well means a
+// stale row cannot reintroduce the disagreement on the page.
+function bandOf(score) {
+  if (score == null) return null;
+  if (score <= RED_MAX) return 'red';
+  if (score <= AMBER_MAX) return 'amber';
+  return 'green';
+}
+
+const RING_R = 30;
+const RING_C = 2 * Math.PI * RING_R;
+
+// PageSpeed's ring. Labelled rather than aria-hidden: the number lives inside
+// the SVG, so hiding it would take the score off the page for a screen reader,
+// and the label says the arc's meaning rather than describing the arc.
+function ring(score, colour) {
+  const filled = (Math.max(0, Math.min(100, score)) / 100) * RING_C;
+  const c = COLOURS[colour] || '#8b949e';
+  return `<svg class="wt-ring" width="76" height="76" viewBox="0 0 76 76"
+              role="img" aria-label="Scores ${score} out of 100" focusable="false">
+        <circle cx="38" cy="38" r="${RING_R}" fill="none" stroke="var(--surface-2)" stroke-width="6"/>
+        <circle cx="38" cy="38" r="${RING_R}" fill="none" stroke="${c}" stroke-width="6"
+                stroke-linecap="round" stroke-dasharray="${filled.toFixed(1)} ${(RING_C - filled).toFixed(1)}"
+                transform="rotate(-90 38 38)"/>
+        <text x="38" y="38" text-anchor="middle" dominant-baseline="central"
+              class="wt-ring-num" fill="${c}">${score}</text>
+      </svg>`;
+}
+
+function daysBetween(fromIso, toIso) {
+  return Math.round((Date.parse(toIso) - Date.parse(fromIso)) / 86400000);
+}
+
+// Movement as a percentage of where the system started, over the days it took.
+// A percentage rather than the raw difference because the composite is now out
+// of 100 and "+2" reads as trivial at 66 and as substantial at 16.
+function deltaLine(entry) {
+  const m = entry && entry.movement;
+  // One reading is a position, not a movement. "0%" would tell the reader the
+  // system held steady when we have measured it exactly once.
+  if (!m) return '<span class="wt-delta">one reading</span>';
+
+  const days = daysBetween(m.from, m.to);
+  const window = `${days} day${days === 1 ? '' : 's'}`;
+  if (m.to_score === m.from_score) return `<span class="wt-delta">No change · ${window}</span>`;
+
+  // A system that started at zero has no percentage to move by; say the points.
+  const pct = m.from_score === 0
+    ? null
+    : ((m.to_score - m.from_score) / m.from_score) * 100;
+  const up = m.to_score > m.from_score;
+  const magnitude = pct == null
+    ? `${up ? '+' : ''}${m.to_score - m.from_score}`
+    : `${Math.abs(pct).toFixed(1)}%`;
+
+  return `<span class="wt-delta"><span class="${up ? 'wt-up' : 'wt-down'}">`
+    + `${up ? '▲' : '▼'} ${magnitude}</span> · ${window}</span>`;
+}
+
+function actionBlock(s) {
+  const a = Criteria.topAction(s);
+  // No action is a real answer: nothing on this system is above green. An empty
+  // bordered strip would read as a rendering failure, so the block is omitted.
+  if (!a) return '';
+  return `<div class="wt-action">
+        <div class="wt-action-line">
+          <span class="wt-action-crit">${esc(a.label)}</span>
+          <span class="wt-sev wt-sev-${esc(a.severity)}">${esc(a.severity)}</span>
+        </div>
+        <div class="wt-action-do" title="${esc(a.full)}">${esc(a.action)}</div>
+      </div>`;
+}
+
+function breakdown(key, s) {
+  const rows = Criteria.criterionRows(s).map((r) => {
+    if (r.score == null) {
+      return `<div class="wt-brk-row">
+            <span class="wt-brk-name">${esc(r.label)}</span>
+            <span class="wt-brk-na">not scored</span>
+            <span class="wt-brk-score wt-brk-na">—</span>
+          </div>`;
+    }
+    // Criteria stay on /5 — they are read against their own published anchors,
+    // and rescaling them would divorce them from those anchors. The bar is what
+    // makes the two scales legible side by side.
+    const colour = r.colour || null;
+    const pct = Math.round((r.score / 5) * 100);
+    return `<div class="wt-brk-row">
+          <span class="wt-brk-name">${esc(r.label)}</span>
+          <span class="wt-brk-bar"><span style="width:${pct}%;background:${COLOURS[colour] || '#8b949e'}"></span></span>
+          <span class="wt-brk-score ${colour ? 'wt-' + colour : ''}">${r.score.toFixed(1)}</span>
+        </div>`;
+  }).join('');
+
+  return `<details class="wt-expand">
+        <summary>Expand</summary>
+        <div class="wt-brk">
+          ${rows}
+          <a class="wt-brk-ref" href="/criteria">What these measure →</a>
+          <a class="wt-brk-ref" href="/system/${esc(key)}">Full report →</a>
+        </div>
+      </details>`;
+}
+
+function systemCard(key, s, entry) {
+  const name = esc(displayName(key));
+  const stack = s.stack ? `<span class="wt-stack">${esc(s.stack)}</span>` : '';
+
+  if (s.score == null) {
+    return `<div class="wt-card">
+        <div class="wt-body">
+          <div class="wt-head"><span class="wt-name">${name}</span>${stack}</div>
+          <div class="wt-fig">
+            ${dot(null)}<span class="na-text">not yet scored</span>
+          </div>
+        </div>
+        <details class="wt-expand">
+          <summary>Expand</summary>
+          <div class="wt-brk"><a class="wt-brk-ref" href="/system/${esc(key)}">Full report →</a></div>
+        </details>
+      </div>`;
+  }
+
+  const colour = bandOf(s.score);
+  return `<div class="wt-card">
+      <div class="wt-body">
+        <div class="wt-head"><span class="wt-name">${name}</span>${stack}</div>
+        <div class="wt-fig">
+          ${ring(s.score, colour)}
+          <div>${deltaLine(entry)}</div>
+        </div>
+      </div>
+      ${actionBlock(s)}
+      ${breakdown(key, s)}
+    </div>`;
+}
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${Number(d)} ${months[Number(m) - 1]} ${y}`;
+}
+
+// ── Trend charts ─────────────────────────────────────────────────────────────
+//
+// Hand-rolled SVG, for the reason the sparkline was: two charts of a dozen
+// points do not earn a charting dependency, and this page ships into a repo
+// that is going public, where every dependency is something else for a stranger
+// to trust.
+
+// Distinct per-system colours, deliberately NOT the band colours — a line that
+// is red because the system is red would collide with a line that is red
+// because it is the third system in the list.
+const SERIES_COLOURS = [
+  '#58a6ff', '#bc8cff', '#39c5cf', '#f778ba', '#d9a05b',
+  '#7ee787', '#ffa198', '#a5d6ff',
+];
+
+const CHART_W = 660;
+const CHART_H = 215;
+const PLOT_TOP = 20;
+const PLOT_BOTTOM = 168;
+const AXIS_Y = 190;
+
+function gridline(y, label, xFrom) {
+  return `<line x1="${xFrom}" y1="${y.toFixed(1)}" x2="${CHART_W - 44}" y2="${y.toFixed(1)}"
+        stroke="var(--border-soft)" stroke-width="1"/>
+      <text x="${xFrom - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end" fill="#8b949e" font-size="10">${label}</text>`;
+}
+
+function dateTicks(dates, xOf) {
+  // Only the ends and a couple between: eleven date labels at this width
+  // overlap into a grey smear.
+  const idx = dates.length <= 4
+    ? dates.map((_, i) => i)
+    : [0, Math.round((dates.length - 1) / 3), Math.round(((dates.length - 1) * 2) / 3), dates.length - 1];
+  return [...new Set(idx)].map((i) => `<text x="${xOf(i).toFixed(1)}" y="${AXIS_Y + 19}"
+        text-anchor="middle" fill="#8b949e" font-size="10">${esc(fmtShortDate(dates[i]))}</text>`).join('');
+}
+
+function fmtShortDate(iso) {
+  const [, m, d] = iso.split('-');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${Number(d)} ${months[Number(m) - 1]}`;
+}
+
+function compositeChart(sample) {
+  const { dates, composite } = sample;
+  if (!composite.length || dates.length < 2) return '';
+  const LEFT = 44;
+  const x = (i) => LEFT + (i * (CHART_W - LEFT - 44)) / (dates.length - 1);
+  const y = (v) => PLOT_BOTTOM - (v / 100) * (PLOT_BOTTOM - PLOT_TOP);
+
+  const grid = [0, 25, 50, 75, 100].map((v) => gridline(y(v), String(v), LEFT)).join('');
+  // The band edges, so a line crossing into amber is visible as such without
+  // anyone having to read the axis.
+  const bands = [[RED_MAX, COLOURS.red], [AMBER_MAX, COLOURS.amber]].map(([v, c]) => `
+      <line x1="${LEFT}" y1="${y(v).toFixed(1)}" x2="${CHART_W - 44}" y2="${y(v).toFixed(1)}"
+            stroke="${c}" stroke-width="1" stroke-dasharray="3 4" opacity="0.35"/>`).join('');
+
+  const lines = composite.map((s, n) => {
+    const c = SERIES_COLOURS[n % SERIES_COLOURS.length];
+    const d = s.points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.score).toFixed(1)}`).join(' ');
+    const dots = s.points.map((p, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.score).toFixed(1)}" r="2.2" fill="${c}"/>`).join('');
+    return `<path d="${d}" fill="none" stroke="${c}" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
+  }).join('');
+
+  const legend = composite.map((s, n) => `<span><i style="background:${SERIES_COLOURS[n % SERIES_COLOURS.length]}"></i>${esc(displayName(s.key))}</span>`).join('');
+
+  return `<div class="wt-chart-box">
+      <div class="wt-chart-title">Composite score</div>
+      <svg class="wt-chart" viewBox="0 0 ${CHART_W} ${CHART_H}" width="100%" height="${CHART_H}"
+           role="img" aria-label="Sample composite score per system over time">
+        ${grid}${bands}${dateTicks(dates, x)}${lines}
+      </svg>
+      <div class="wt-chart-legend">${legend}</div>
+    </div>`;
+}
+
+function issuesChart(sample) {
+  const { issues } = sample;
+  if (issues.length < 2) return '';
+  const LEFT = 52;
+  const max = Math.max(...issues.map((p) => p.total)) * 1.12;
+  const y = (v) => PLOT_BOTTOM - (v / max) * (PLOT_BOTTOM - PLOT_TOP);
+  const slot = (CHART_W - LEFT - 44) / issues.length;
+  const BAR = Math.min(26, slot * 0.32);
+  // Two bars per date, side by side: the total and what was resolved.
+  const totalX = (i) => LEFT + i * slot + slot / 2 - BAR - 2;
+  const resolvedX = (i) => LEFT + i * slot + slot / 2 + 2;
+
+  const step = Math.max(1, Math.round(max / 4 / 50) * 50);
+  const grid = [0, step, step * 2, step * 3, step * 4]
+    .filter((v) => v <= max).map((v) => gridline(y(v), String(v), LEFT)).join('');
+
+  const bars = issues.map((p, i) => {
+    // The new portion sits at the TOP of the total bar, so the boundary between
+    // the two colours is literally the line the New series traces.
+    const newTop = y(p.total);
+    const newBottom = y(p.total - p.introduced);
+    return `
+      <rect x="${totalX(i).toFixed(1)}" y="${newTop.toFixed(1)}" width="${BAR.toFixed(1)}"
+            height="${Math.max(0, newBottom - newTop).toFixed(1)}" fill="${COLOURS.red}" rx="1"/>
+      <rect x="${totalX(i).toFixed(1)}" y="${newBottom.toFixed(1)}" width="${BAR.toFixed(1)}"
+            height="${Math.max(0, PLOT_BOTTOM - newBottom).toFixed(1)}" fill="${COLOURS.blue}" opacity="0.30" rx="1"/>
+      <rect x="${resolvedX(i).toFixed(1)}" y="${y(p.resolved).toFixed(1)}" width="${BAR.toFixed(1)}"
+            height="${Math.max(0, PLOT_BOTTOM - y(p.resolved)).toFixed(1)}" fill="${COLOURS.green}" rx="1"/>`;
+  }).join('');
+
+  const centreTotal = (i) => totalX(i) + BAR / 2;
+  const centreResolved = (i) => resolvedX(i) + BAR / 2;
+  const line = (pts, colour) => {
+    const d = pts.map(([px, py], i) => `${i ? 'L' : 'M'}${px.toFixed(1)},${py.toFixed(1)}`).join(' ');
+    const dots = pts.map(([px, py]) => `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="3" fill="${colour}"/>`).join('');
+    return `<path d="${d}" fill="none" stroke="${colour}" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
+  };
+
+  const lines = [
+    line(issues.map((p, i) => [centreTotal(i), y(p.total)]), COLOURS.blue),
+    // New traces the BASE of the red band, so the gap between the two lines is
+    // that scan's new issues rather than a second reading of the total.
+    line(issues.map((p, i) => [centreTotal(i), y(p.total - p.introduced)]), COLOURS.red),
+    line(issues.map((p, i) => [centreResolved(i), y(p.resolved)]), COLOURS.green),
+  ].join('');
+
+  const ticks = issues.map((p, i) => [i, p.date]);
+  const tickIdx = issues.length <= 4
+    ? ticks.map(([i]) => i)
+    : [0, Math.round((issues.length - 1) / 3), Math.round(((issues.length - 1) * 2) / 3), issues.length - 1];
+  const dateLabels = [...new Set(tickIdx)].map((i) => `<text x="${(LEFT + i * slot + slot / 2).toFixed(1)}" y="${AXIS_Y + 19}"
+        text-anchor="middle" fill="#8b949e" font-size="10">${esc(fmtShortDate(issues[i].date))}</text>`).join('');
+
+  return `<div class="wt-chart-box">
+      <div class="wt-chart-title">Issues</div>
+      <svg class="wt-chart" viewBox="0 0 ${CHART_W} ${CHART_H}" width="100%" height="${CHART_H}"
+           role="img" aria-label="Sample total, new and resolved issues per scan">
+        ${grid}${bars}${lines}${dateLabels}
+      </svg>
+      <div class="wt-chart-legend">
+        <span><i style="background:${COLOURS.blue}"></i>Total issues</span>
+        <span><i style="background:${COLOURS.red}"></i>New issues</span>
+        <span><i style="background:${COLOURS.green}"></i>Resolved issues</span>
+      </div>
+    </div>`;
+}
+
+const WINDOW_ORDER = ['week', 'month', 'quarter'];
+let activeWindow = 'month';
+
+function trendSection(org, keys, benchmark, endIso) {
+  const systems = keys.map((k) => ({ key: k, score: benchmark.systems[k].score }));
+  const sample = SampleTrends.sampleFor(systems, activeWindow, endIso);
+
+  const chips = WINDOW_ORDER.map((w) => `<button class="wt-chip" type="button" data-window="${w}"
+          aria-pressed="${w === activeWindow}">${SampleTrends.WINDOWS[w].label}</button>`).join('');
+
+  return `<section class="wt-trend">
+      <div class="wt-trend-head">
+        <div class="section-label">Trends</div>
+        <span class="wt-sample">Sample data</span>
+        <div class="wt-chips" data-org="${esc(org)}">${chips}</div>
+      </div>
+      <p class="wt-sample-note">
+        Both charts below are drawn from invented numbers. Composite: only each
+        line's final point is real — the path to it is made up, because the true
+        series is flat for almost every system and cannot show whether the chart
+        works. Issues: entirely invented, because resolved and introduced counts
+        are not retained yet and cannot be computed for any past date.
+      </p>
+      <div class="wt-charts">
+        ${compositeChart(sample)}
+        ${issuesChart(sample)}
+      </div>
+    </section>`;
+}
+
+function bandLegend() {
+  return `<div class="wt-legend">
+      <span><span class="wt-key" style="background:${COLOURS.red}"></span>0–${RED_MAX}</span>
+      <span><span class="wt-key" style="background:${COLOURS.amber}"></span>${RED_MAX + 1}–${AMBER_MAX}</span>
+      <span><span class="wt-key" style="background:${COLOURS.green}"></span>${AMBER_MAX + 1}–100</span>
+      <a class="wt-legend-link" href="/criteria">How this is scored →</a>
+    </div>`;
+}
+
+// ── Assembly ─────────────────────────────────────────────────────────────────
+
+// Tabs are ordered by how many systems an organisation has, then by name, so
+// the order is a property of the data rather than a list maintained by hand.
+function orgsOf(benchmark) {
+  const counts = {};
+  for (const s of Object.values(benchmark.systems || {})) {
+    const org = s.org || 'unattributed';
+    counts[org] = (counts[org] || 0) + 1;
+  }
+  return Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
+}
+
+function keysFor(benchmark, org) {
+  return Object.keys(benchmark.systems || {})
+    .filter((k) => (benchmark.systems[k].org || 'unattributed') === org)
+    .sort();
+}
+
+// The most recent scan date anywhere in the fleet. The trend windows end here
+// rather than at today's date, so a system that stopped being measured shows as
+// a series that stops, not as a fortnight of flat line.
+function latestReading(history) {
+  let latest = null;
+  for (const entry of Object.values(history.systems || {})) {
+    for (const p of entry.points || []) {
+      if (!latest || p.date > latest) latest = p.date;
+    }
+  }
+  return latest;
+}
+
+function render(benchmark, history) {
+  if (benchmark.example) {
+    document.getElementById('example-notice').style.display = 'flex';
+  }
+
+  const orgs = orgsOf(benchmark);
+  // The trend windows end at the most recent real reading, not at today. Ending
+  // "now" would draw a fortnight of flat line past the last scan and read as
+  // stability rather than as silence.
+  const endIso = latestReading(history) || benchmark.last_updated;
+
+  // No counts on the tabs. A count beside an organisation's name told the
+  // reader how many cards they were about to see, which they are about to see.
+  document.getElementById('org-tabs').innerHTML = orgs.map((org, i) => `
+    <button class="org-tab" role="tab" type="button"
+            id="tab-${esc(org)}" aria-controls="panel-${esc(org)}"
+            aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">
+      ${esc(orgLabel(org))}
+    </button>`).join('');
+
+  document.getElementById('org-panels').innerHTML = orgs.map((org, i) => {
+    const keys = keysFor(benchmark, org);
+    return `
+      <div class="org-panel" role="tabpanel" id="panel-${esc(org)}"
+           aria-labelledby="tab-${esc(org)}" ${i === 0 ? '' : 'hidden'}>
+        <div class="wt-grid">
+          ${keys.map((k) => systemCard(k, benchmark.systems[k], history.systems[k])).join('')}
+        </div>
+        ${bandLegend()}
+        ${trendSection(org, keys, benchmark, endIso)}
+      </div>`;
+  }).join('');
+
+  wireTabs(orgs);
+  wireWindowChips(() => render(benchmark, history));
+}
+
+// The window chips re-render everything rather than patching the two charts in
+// place. Two charts of a dozen points cost nothing to rebuild, and the version
+// that patched them had to keep its own copy of which tab was open.
+function wireWindowChips(rerender) {
+  for (const chip of document.querySelectorAll('.wt-chip')) {
+    chip.addEventListener('click', () => {
+      activeWindow = chip.dataset.window;
+      // Which tab is showing is held in the URL already, and re-rendering reads
+      // it back — so switching window does not throw the reader back to the
+      // first organisation.
+      rerender();
+    });
+  }
+}
+
+function wireTabs(orgs) {
+  const tabs = Array.from(document.querySelectorAll('.org-tab'));
+
+  function select(tab, pushHash) {
+    for (const t of tabs) {
+      const on = t === tab;
+      t.setAttribute('aria-selected', String(on));
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    }
+    // The tab lands in the URL so a view can be linked to and returned to.
+    // replaceState rather than a hash assignment: setting location.hash would
+    // scroll the panel into view and yank the page down on every tab click.
+    if (pushHash) {
+      const org = tab.id.replace(/^tab-/, '');
+      history.replaceState(null, '', `#${org}`);
+    }
+  }
+
+  // An unknown or absent org in the URL falls back to the first tab rather than
+  // showing nothing — a stale link should degrade, not break.
+  const wanted = decodeURIComponent(String(location.hash || '').replace(/^#/, ''));
+  if (wanted && orgs.indexOf(wanted) > -1) {
+    const tab = tabs.find((t) => t.id === `tab-${wanted}`);
+    if (tab) select(tab, false);
+  }
+
+  tabs.forEach((tab, i) => {
+    tab.addEventListener('click', () => select(tab, true));
+    // Arrow-key movement is what makes a tablist a tablist rather than a row
+    // of buttons wearing the role.
+    tab.addEventListener('keydown', (e) => {
+      const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+      if (!step) return;
+      e.preventDefault();
+      const next = tabs[(i + step + tabs.length) % tabs.length];
+      select(next, true);
+      next.focus();
+    });
+  });
+}
+
+// The display-name file is optional by design, so a 404 is a valid answer and
+// must not take the page down with it. Anything else — a 500, a malformed body,
+// the network — is also survivable here, because the fallback is derived names
+// rather than a blank board. Deliberately the ONLY fetch on this page treated
+// this way: the scores and the history failing must still fail loudly.
+async function optionalJson(url) {
+  try {
+    return await Loading.getJson(url);
+  } catch (e) {
+    return {};
+  }
+}
+
+async function init() {
+  const regions = [document.getElementById('org-panels')];
+  try {
+    const [benchmark, history, names] = await Loading.withLoading(
+      regions,
+      'Loading scores…',
+      () => Promise.all([
+        Loading.getJson('/data/benchmark.json'),
+        Loading.getJson('/data/history.json'),
+        optionalJson('/data/display-names.json'),
+      ]),
+    );
+    NAMES = { orgs: (names && names.orgs) || {}, systems: (names && names.systems) || {} };
+    render(benchmark, history);
+    // The header carries the date now. It used to be in the footer as well,
+    // which is the same fact twice on one screen.
+    document.getElementById('header-updated').textContent =
+      `Last updated ${fmtDate(benchmark.last_updated)}`;
+  } catch (e) {
+    // The reader already has the failure on screen; this is for the console.
+    console.error('Failed to load data:', e);
+  }
+}
+
+init();
+}());
+</script>
+</body>
+</html>

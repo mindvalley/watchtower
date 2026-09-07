@@ -1,0 +1,289 @@
+{
+  "_comment": "Criteria reference for the Agentic Compatibility Benchmark — the single source of truth for what each criterion means and why. GOVERNANCE: whenever a criterion changes (tool set, thresholds/anchors, triage filters, or scored/pending status), update its entry here IN THE SAME CHANGE. Rendered by /criteria (public/criteria.html). Criteria are displayed with contiguous position numbers (1..N) in array order; the `id` is the internal/data key (kept stable, e.g. Security = 9 in benchmark.json); the `slug` drives the /criteria/<slug> URL. Criteria that were dropped from the benchmark (former C3, C5) are intentionally absent. See standing memories decision-mvp-criteria-dispositions and decision-c9-triage-required; triage filters mirror triage-config.json in the public watchtower repository.",
+  "last_updated": "2026-08-27",
+  "status_legend": {
+    "scored": "Live — measured and scored on the dashboard.",
+    "pending": "In progress — defined and being brought online; not yet scored. Updated as each criterion comes online."
+  },
+  "criteria": [
+    {
+      "id": "1",
+      "slug": "clear-domain-boundaries",
+      "name": "Clear Domain Boundaries",
+      "status": "scored",
+      "one_liner": "Modules and services have single responsibilities with no hidden cross-boundary coupling.",
+      "what": "Coupling health via change-coupling (code-maat over git history, language-neutral) and code-graph clustering (tree-sitter, cross-stack).",
+      "why": "It is load-bearing beyond its own score: the code-graph is the architecture-definition substrate that also feeds critical-path inference (Test Coverage) and the future Enforce layer's autonomy gating. This is the #1 build after the first criterion set is online.",
+      "how": {
+        "tools": "graphify 0.9.28 (tree-sitter code graph, deterministic and offline; grammars for Elixir, Ruby, Python, TypeScript/JavaScript). External coupling comes from our own call-site detector, not from graphify. Elixir systems are measured but not graded on the graph-derived metrics - see the nuance below.",
+        "anchors": "Acyclic Dependencies Principle — 0 circular dependencies between modules. Module fan-out under 5 on average.",
+        "scoring": "Mean of the scored metrics. Cycles: 0 green, 1-3 amber, 4+ red. Fan-out: under 5 green, 5-10 amber, over 10 red. Gradation inside a band is provisional. A repo where fewer than half its declared modules appear in the dependency graph is reported indeterminate rather than scored. On a stack whose code graph is known to under-resolve, each graph metric is judged separately: graded when the measured value already breaches the green threshold (under-counting can only understate it), withheld when it sits inside green (where the missing edges could be the whole story) - see the asymmetric-withholding nuance. Where no metric is scoreable the criterion is indeterminate, never a default high mark. Violation trend is deferred; it diffs the same graph."
+      },
+      "nuances": [
+        {
+          "title": "Modules are declared, not guessed",
+          "detail": "A module is read from the repo's own workspace declaration and its member globs - pnpm-workspace packages (the packages: sequence only, honouring ! negations), an Elixir umbrella's apps_path, npm workspaces, uv workspaces. Walking for manifests would promote Phoenix's assets/package.json to a module. A workspace declaration is authoritative and short-circuits; the sibling-projects layout read is a heuristic and falls through to the lib/, src/, app/ source-namespace fallback when it does not fire."
+        },
+        {
+          "title": "Layer-organised repos are indeterminate",
+          "detail": "A repo organised by architectural layer rather than domain (models, controllers, services) reads indeterminate. Layers legitimately depend on each other, so cycles among them are not defects."
+        },
+        {
+          "title": "Elixir systems are measured, and graded only where the measurement is a credible floor",
+          "detail": "The graph-derived metrics are only as good as the graph. Measured against ground truth on 2026-07-29: graphify resolves an Elixir alias only when the module name is exactly two segments and the file path is its literal lowercase, so Services.Alpha resolves but Services.Alpha.Client and snake_cased names such as Services.TwoWord do not - and real Elixir is overwhelmingly one of those. On one Elixir umbrella that recovered 4 of 8 real cross-app dependencies and reported one of them backwards (app A to app B, which has no references, while the real B to A was missed). The same check on a TypeScript monorepo recovered 5 of 6 real code dependencies, so the defect is stack-specific. This is indeterminate rather than Pending: we are not committing to repair a third-party extractor."
+        },
+        {
+          "title": "Withholding is asymmetric: bad news from an under-counting graph is still credible",
+          "detail": "Every edge the extractor misses pushes both graph metrics down - a missed dependency lowers fan-out and can erase a cycle outright. So a measured value on an under-resolving stack is a floor: the real figure can only be higher. That makes a bad reading trustworthy and a clean reading worthless. A measured 2 cycles means there are at least 2; a measured 0 means nothing. A mean fan-out of 5.5 is already outside the green band whatever was missed; a mean of 2 could be anything. Each metric is therefore judged on its own: graded when the measured floor already breaches the green threshold, withheld when the floor sits inside it. Grading a floor yields the most generous score the evidence supports, which is the right direction to err - it can never publish a system as worse than the measurement proves, and it can never publish a green the measurement cannot support. Introduced 2026-07-30, when withholding a metric that read amber while scoring one that read green published a full green on a system and lifted its composite."
+        },
+        {
+          "title": "Dependency relations are a denylist with a published audit",
+          "detail": "Every EXTRACTED graphify relation counts as a dependency unless it is explicitly excluded, and the report carries a per-relation count so the classification is inspectable. Excluded, each for a recorded reason: contains and method and defines (structural, file-to-symbol), rationale_for and cites (doc annotations), indirect_call and uses (INFERRED confidence), and references. references is graphify's unresolved bare-name relation: measured across one repo per stack it produced zero cross-module pairs that imports did not already carry, and three demonstrably false ones."
+        },
+        {
+          "title": "Standard-library and cross-language misresolution are defended against",
+          "detail": "graphify resolves a module reference by name, so Elixir's require Logger binds to any local logger.ex and Python's import logging binds to any local logging.py. Import-shaped links whose target basename is a standard-library module name for that language are dropped and counted as skipped_stdlib_collision_edges. Links whose two endpoints are in different language families (a .py 'calling' a .ts) are dropped and counted as skipped_cross_language_edges. A cycle direction held up by a single link into a stdlib-colliding filename is surfaced as a finding but excluded from the count."
+        },
+        {
+          "title": "Degenerate graphs read indeterminate, measured by coverage",
+          "detail": "The share of declared modules that appear in the dependency graph is measured and published on every report alongside its threshold of 50%. Below that, the criterion is indeterminate: the extractor did not resolve enough of the repo for a grade to mean anything. The measured distribution across the eleven benchmark systems is bimodal - 0% where extraction resolved nothing, 61.5% to 100% everywhere else."
+        },
+        {
+          "title": "External targets are call-site anchored, and redacted",
+          "detail": "A URI literal counts as external coupling only where it sits at a recognised HTTP-client construction, base-URL option, database connection or queue/topic publish. Unanchored literals - asset URLs, seed data, social links, SVG xmlns, JSON-schema ids - are rejected and the rejected count is published. Test, fixture, mock, cassette and __mocks__ paths (the shared triage-config path allowlist), build output, vendored trees and minified bundles are excluded. Documentation and placeholder domains and hostnames with no dot never count. Outbound call targets are emitted as host only: connection strings can carry credentials, so userinfo, path and query are stripped before anything is written."
+        },
+        {
+          "title": "No Vue, Svelte or Astro parser - known gap for Vue-heavy frontends",
+          "detail": "The installed grammar set omits these despite the tool's documentation. Component edges from Vue single-file components, Svelte files, and Astro files are absent from the code graph. A repo where no file type at all produces parseable edges is reported indeterminate and left unscored. A repo whose other code (TypeScript, JavaScript, Elixir, Ruby) does parse is scored on an incomplete graph - Vue-side cycles go undetected and mean fan-out reads lower than reality because the Vue component layer is invisible to the scorer. A Vue-heavy frontend in a TypeScript workspace will therefore appear cleaner than it is."
+        },
+        {
+          "title": "Phase 1 sees only the declared top-level modules",
+          "detail": "Cycles and fan-out are measured between the units the repo declares. Tangling inside one workspace member is invisible to this phase, and module-level cycles between top-level packages are rare in practice, so a green C1 is a statement about the declared boundaries and not about internal structure. Change coupling and boundary-violation trend in phase 2 are what add the behavioural half."
+        }
+      ],
+      "last_reviewed": "2026-07-28"
+    },
+    {
+      "id": "2",
+      "slug": "documented-apis",
+      "name": "Documented APIs",
+      "status": "pending",
+      "one_liner": "Public interfaces are described, current, and findable by an agent.",
+      "what": "Reframed from 'REST coverage %' to 'can an AI find and understand the APIs and code?' — API description coverage plus documentation currency.",
+      "why": "An agent that cannot discover or understand a system's contracts cannot safely change it.",
+      "how": {
+        "tools": "Absinthe GraphQL schema static parse (description coverage); doc generation in CI + git staleness (currency).",
+        "anchors": "0 undescribed public fields (introspection ≠ docs).",
+        "scoring": "Description coverage + doc currency, mean of scored sub-metrics."
+      },
+      "nuances": [
+        {
+          "title": "N/A where there is no machine API",
+          "detail": "Systems with no machine-readable API (e.g. a batch service with no HTTP surface) are N/A on the API-description facet and excluded from that average, but still assessed on code currency. Agent-context files (AGENTS.md/llms.txt) are a flagged recommendation, not scored — presence is gameable."
+        }
+      ],
+      "last_reviewed": "2026-07-07"
+    },
+    {
+      "id": "4",
+      "slug": "observable-state",
+      "name": "Observable State",
+      "status": "scored",
+      "one_liner": "The three pillars of observability — logs, traces, errors — are active in code, not merely installed.",
+      "what": "Whether the system is instrumented to be observable — the three backend pillars (structured logging, distributed tracing, error/exception tracking) plus frontend error tracking — measured as active, not merely present. Each pillar is assessed on a declared→configured→exercised ladder.",
+      "why": "If an agent (or anyone) breaks something, observability is how the failure is detected. A pillar that is declared in the manifest but never wired up gives false confidence: the library is there, but nothing is emitted. Systems an autonomous agent can safely change are ones where breakage surfaces loudly.",
+      "how": {
+        "tools": "Headless static scan — dependency manifests (mix.exs / Gemfile / package.json) + config files + source call-sites. No compile, no external scanner; signal lists live in observability-signals.js in the public watchtower repository.",
+        "anchors": "The three pillars of observability (logs, traces, errors); the \"active, not just present\" discipline — declared → configured → exercised.",
+        "scoring": "Each pillar takes the highest rung it reaches: none 0.0, declared 2.0, configured 3.5, exercised 5.0 (exercised wins even if the config heuristic did not match — real call sites prove it is active). The criterion is the mean of applicable pillars, equal weight. No hard-cap — under-instrumentation is an operability risk, not a security emergency."
+      },
+      "nuances": [
+        {
+          "title": "Frontend pillar is N/A when there is no frontend",
+          "detail": "The frontend error-tracking pillar is excluded from the mean (marked N/A, coverage-noted) when the system has no real frontend surface — detected, not hardcoded: a frontend manifest declaring a UI framework (vue/react/nuxt) or a non-trivial .vue/.tsx count. Expected N/A for backend-only services, whose criterion is then the mean of the three backend pillars."
+        },
+        {
+          "title": "Highest rung wins",
+          "detail": "A pillar is scored at the strongest evidence found. If code exercises the tool (real Logger./tracer/capture_exception call sites), the pillar is active regardless of whether the configuration heuristic matched — the config regexes are approximate, the usage evidence is decisive."
+        },
+        {
+          "title": "Stack caveats",
+          "detail": "Elixir Logger is built into the standard library, so \"structured logging exercised\" leans on the structured-backend config signal rather than raw Logger. calls alone. For Sentry-Vue, Sentry.init() effectively IS the integration, so configured and exercised sit close together for the frontend pillar. AppSignal (Ruby) auto-instruments Rails with configuration in config/appsignal.yml and few explicit calls, so it is detected via its YAML config and namespace usage rather than assuming explicit capture sites. Frontend error tracking requires a real reporting library or an explicit capture call (Sentry.captureException / Bugsnag.notify) — a bare Vue errorHandler is error handling, not tracking, and does not count."
+        },
+        {
+          "title": "Runtime metrics deferred",
+          "detail": "Coverage %, alert effectiveness, stale-by-traffic and a frontend RUM/performance pillar are runtime signals deferred to the future Monitor layer; this criterion scores the static readiness kernel only."
+        }
+      ],
+      "last_reviewed": "2026-07-15"
+    },
+    {
+      "id": "6",
+      "slug": "test-coverage",
+      "name": "Test Coverage",
+      "status": "scored",
+      "one_liner": "A test-discipline floor — enough automated coverage to change code safely.",
+      "what": "Static test-coverage readiness — do source files have tests, and does CI enforce a coverage bar. A discipline floor, not a quality guarantee (coverage ≠ quality).",
+      "why": "Without a safety net of tests, neither an agent nor an engineer can refactor or ship with confidence.",
+      "how": {
+        "tools": "Static test↔source mapping; discipline read from GitHub Actions coverage enforcement (minimum_coverage gates, e.g. a cobertura coverage action) — coverage library is a secondary audit label; no test runs.",
+        "anchors": "Two facets, mean of 2. Breadth: fraction of source files with a paired test file (linear proxy, pooled backend+frontend). Discipline: coverage enforced in CI (GitHub Actions minimum_coverage gate), graded on Google 60/75/90 tiers, mean of applicable stacks. Headless/no-compile.",
+        "scoring": "Each of the two facets scores separately; the criterion is their mean. Breadth: linear file-presence proxy. Discipline: Google coverage tiers (60→amber, 75→green, 90→excellent)."
+      },
+      "nuances": [
+        {
+          "title": "Actual line-coverage % deferred to Monitor",
+          "detail": "Actual line-coverage % needs compile+DB+secrets and is deferred to the Monitor layer. Breadth is file-presence, not line coverage — a paired test may exercise only part of a file; the precise per-unit map needs the C1 code-graph."
+        },
+        {
+          "title": "minimum_coverage: 0 counts as configured-not-enforced",
+          "detail": "A coverage tool configured with a threshold of 0 (or missing) counts toward the configured rung but not the enforced tier — the discipline floor is not a hard requirement when the threshold is set to pass with no test."
+        },
+        {
+          "title": "Critical-path E2E is planned",
+          "detail": "Inferring critical paths (via the Clear Domain Boundaries code-graph ∩ churn ∩ complexity ∩ traffic) to flag untested critical pipelines depends on that criterion and comes later."
+        },
+        {
+          "title": "Breadth proxy is optimistic",
+          "detail": "Breadth pairs a source file to a test by basename stem, ignoring path, so one user_test.exs marks every */user.ex as tested. The file-presence proxy therefore reads slightly generous; a precise per-unit map awaits the Clear Domain Boundaries code-graph."
+        },
+        {
+          "title": "CI-gate detection is GitHub-only for now",
+          "detail": "Tool-config signals (coveralls.json, SimpleCov, vitest/jest thresholds) are CI-agnostic, but the CI-gate signal is currently read only from GitHub Actions workflows. All pilots are on GitHub; other CI platforms (GitLab/Jenkins/CircleCI/Azure) are added when the first non-GitHub tenant lands (cross-org pilot)."
+        }
+      ],
+      "last_reviewed": "2026-07-17"
+    },
+    {
+      "id": "7",
+      "slug": "deployment-safety",
+      "name": "Deployment Safety",
+      "status": "scored",
+      "one_liner": "Changes can be deployed safely and bad deploys recovered — progressive delivery, automated rollback, a gated staged pipeline, and independent deployability, as declared in the repo.",
+      "what": "Four deployment-safety capabilities, detected from in-repo config (CI on any platform + IaC + Dockerfiles): progressive delivery (canary/blue-green), automated health-triggered rollback, pipeline safety (staged staging->prod progression + CI gating), and independent deployability (each unit releasable on its own).",
+      "why": "An agent (or engineer) that ships a change needs the deploy path to catch and recover from a bad release. Systems without progressive delivery or automated rollback fail loudly in production; tightly-coupled deployables mean one change redeploys everything, widening the blast radius.",
+      "how": {
+        "tools": "Headless static scan of in-repo CI/CD config (GitHub Actions, GitLab CI, Jenkins, CircleCI), IaC/manifests (Kubernetes, Helm, Kustomize, Argo, Terraform, CodeDeploy), and Dockerfiles. Ecosystem-agnostic — no in-house CD system knowledge; no compile, no external scanner.",
+        "anchors": "DORA deployment capabilities: progressive delivery, automated (health-triggered) rollback, deployment automation with CI gating, and loosely-coupled / independently-deployable architecture.",
+        "scoring": "Each of the three tool capabilities takes a none/basic/mature rung (0.0 / 3.5 / 5.0); independent deployability is binary (independent 5.0 / coupled 2.0). The criterion is the mean of the four. No hard-cap. Because the scan is repo-visible only, a capability handled by an external CD platform but not declared in-repo scores low — itself a finding (an agent working in the repo cannot see it)."
+      },
+      "nuances": [
+        {
+          "title": "Repo-visible only (readiness, not outcomes)",
+          "detail": "C7 measures deployment-safety capability DECLARED IN THE REPO, not verified production behaviour. Automated rollback in particular often lives inside an external CD platform (e.g. Spinnaker, Jenkins) and is not visible to a clone scan — such a system scores low on rollback even if its real deploys recover safely. This is deliberate: an agent working in the repo cannot see externalised safety. DORA outcome metrics (deployment frequency, lead time, change-failure rate, MTTR) are a separate, planned Monitor-layer facet."
+        },
+        {
+          "title": "Ecosystem-agnostic signals",
+          "detail": "Detection uses portable tool markers (Spinnaker, Argo Rollouts, Flagger, CodeDeploy, Helm --atomic, k8s probes/progressDeadlineSeconds, Dockerfile HEALTHCHECK, merge_group, staging->prod workflows) — never in-house CD system names — so the criterion travels to any org."
+        },
+        {
+          "title": "Approximate, tuned against real repos",
+          "detail": "Signal lists and the independent-deployability heuristic (deployable units vs deploy paths) are approximate by design and validated against the real pilot repos before publishing, matching the C4/C8 first-run tuning discipline."
+        }
+      ],
+      "last_reviewed": "2026-07-15"
+    },
+    {
+      "id": "8",
+      "slug": "codebase-simplicity",
+      "name": "Codebase Simplicity",
+      "status": "scored",
+      "one_liner": "Low cyclomatic complexity and low duplication, so canonical patterns are unambiguous for an agent.",
+      "what": "Measures consolidation debt — over-complex functions and duplicated logic from rewrites and app merges that make it hard for an agent (or engineer) to tell which pattern is canonical. Two sub-metrics: cyclomatic complexity and code duplication, averaged.",
+      "why": "Agents cannot safely operate where canonical patterns are ambiguous. Simpler code is more agentic-compatible — the thesis of the whole benchmark.",
+      "how": {
+        "tools": "Complexity: credo, rubocop, and lizard are co-resident adapters, selected per file extension — credo for .ex/.exs (standalone runner, no target compile), rubocop for .rb (Metrics/CyclomaticComplexity only), lizard for .js/.mjs/.cjs/.jsx/.ts/.tsx/.py and for the <script> block of .vue single-file components (source-only). Every material language in a repo is measured, so a polyglot repo is scored by several tools at once and the findings name each. Duplication (all stacks): jscpd. None compiles the target, so all run headless on any clone.",
+        "anchors": "McCabe cyclomatic complexity ≤ 10 (all adapters pinned to 10) · code duplication < 5% (jscpd default).",
+        "scoring": "Complexity is the mean of a measured violation density and a CI enforcement rung. Violation density: 0 functions over CC 10 = green 5.0; above 0 it is graded by density per 1,000 lines of source (see the aggregation-convention nuance). Enforcement: none 0, configured 2.0, enforced above the anchor 3.5, enforced at or below the anchor 5.0 — resolved per language and then pooled WEIGHTED BY each language's share of the measured lines. Duplication is unchanged: < 1% green, 1–5% amber (graded), > 5% red (graded). C8 is the mean of complexity (density + enforcement) and duplication. Unlike Security, C8 has NO hard-cap."
+      },
+      "nuances": [
+        {
+          "title": "The aggregation is our convention, not a published anchor",
+          "detail": "McCabe ≤ 10 per function is the published standard (McCabe 1976); converting a violation count into a score out of five is a choice this benchmark made. Density per 1,000 lines is used because it discriminates and is size-normalised — a small codebase with one complex function and a large one with fifty tell different stories at the same raw count. The raw counts are on the scorecard so the density band need not be trusted in isolation. The 500-line materiality floor — below which a language is skipped rather than measured — is likewise ours, not a published standard. The enforcement ladder is ours too: McCabe ≤ 10 is the published anchor, but converting a detected gate into 0 / 2.0 / 3.5 / 5.0 is a choice this benchmark made. The 3.5 rung in particular — enforced in CI but at a threshold above 10 — is a judgement call, not a standard; it takes the same shape as C6's configured-but-not-enforced rung and exists because we override ESLint's default of 20 down to 10 in our own measurement, so accepting a repo's 20-threshold gate as full marks would contradict the standard we hold ourselves to."
+        },
+        {
+          "title": "A gated repo's clean count describes the gate",
+          "detail": "One Elixir system enforces credo with the cyclomatic check at its default of 9, so no function above 9 can merge. Its zero violations are a property of the gate, not an observation about the code — any complex function is rejected at the PR stage and never enters the history the scanner reads. This is why enforcement is scored alongside the measured density: a clean count on an enforcing repo is reliable evidence of a sustained discipline, and a clean count on an ungated repo is only evidence of the current snapshot."
+        },
+        {
+          "title": "The enforcement rung is weighted by how much code it covers",
+          "detail": "A gate is protective in proportion to the amount of code it stands in front of, so each language's rung is weighted by that language's share of the measured lines rather than averaged flat. One Elixir system enforces credo at 9 over 214,416 of its 315,571 measured lines and gates nothing else: an unweighted mean of [5.0, 0, 0, 0] reads 1.3, which describes a repo with essentially no complexity discipline, and that is not this one. Weighted, it reads 3.4. The more important half runs the other way — unweighted averaging flatters a repo that gates only a twentieth of its code, because one tiny gated language would count for as much as the large ungated one beside it. Weighting also makes the enforcement facet consistent with the density facet, which already pools violations and lines before dividing."
+        },
+        {
+          "title": "Enforcement detection is GitHub Actions only",
+          "detail": "The CI gate is read from GitHub Actions workflow files only. All current benchmark tenants are on GitHub; detection for GitLab CI, Jenkins, CircleCI, and other CI platforms is deferred to the first non-GitHub tenant, following the same convention as C6 (Test Coverage)."
+        },
+        {
+          "title": "Complexity covers every material language in the repo",
+          "detail": "Complexity is measured for every language above a 500-line materiality floor, not for a single “primary stack”. For the Elixir and Ruby systems this now INCLUDES their frontend: one system's Vue, TypeScript and JavaScript are measured alongside its Elixir, and the frontend complexity work previously deferred to a follow-up is superseded and folded in here. Violations and lines are both pooled before the density is computed, so a polyglot repo is not penalised for being polyglot. The per-language breakdown — which tool measured which language, over how many lines, finding how many violations — is in the audit block, because the headline count is a sum across several tools."
+        },
+        {
+          "title": "Residual gaps reported, not silently dropped",
+          "detail": "lizard cannot parse .vue directly, so the <script> block of each single-file component is extracted and analysed, with line numbers mapped back to the .vue file so findings stay actionable. Vue TEMPLATE logic — branching expressed in directives — remains unmeasured; no tool we have measures it. One system's PL/pgSQL (.sql, 4,372 lines) has no complexity tool and is reported by extension with its line count in the scorecard findings; it sits in priv/repo/ with the Ecto migrations, so priv/ is no longer excluded wholesale (only priv/static, priv/gettext and seed trees are). Extractions that fail, files skipped as generated or binary, and languages below the materiality floor are all counted in the scan report. The Elixir→Ruby jscpd tokenizer approximation for duplication also remains a documented gap."
+        },
+        {
+          "title": "Duplication measures code, not data",
+          "detail": "jscpd is run with translations, locale/data files and docs excluded (*.po, *.json, *.csv, *.svg, *.md, locales/). Without this, data files dominate — one repo reads 14.99% raw but 5.89% code-only. Excluding them makes the percentage a code-simplicity signal, not a measure of how many translation strings repeat."
+        },
+        {
+          "title": "Elixir duplication via the Ruby tokenizer",
+          "detail": "jscpd has no native Elixir tokenizer, so .ex/.exs are mapped to the Ruby tokenizer (formats-exts), which handles do/end block structure well enough for copy-paste detection. This is APPROXIMATE for Elixir and is flagged for review; a native Elixir tokenizer would be more precise."
+        },
+        {
+          "title": "Complexity via a standalone Credo runner",
+          "detail": "Credo runs from a throwaway project whose only dependency is Credo, pointed at the clone via files.included — so the target is never compiled and its private Hex/git deps are never fetched (the same headless sidestep Security uses). Credo's default file scope silently skips external paths, so the absolute clone path must be set explicitly."
+        },
+        {
+          "title": "The violation count and the line count exclude the same files",
+          "detail": "Vendored, generated and test code is excluded from BOTH the violation count and the line denominator, from one shared definition rather than a per-tool list. This matters because it was wrong: 22 of one repo's previously-published 57 violations came from vendored jQuery plugins (assets/vendor/js/calendar.js at CC 199, s3.fine-uploader.js, jquery.minicolors.js) and a Playwright test file, and both of another repo's came from a calendar.min.js bundle — files whose lines the denominator had already discarded. The findings told those teams to refactor code they did not write."
+        },
+        {
+          "title": "Allowances: findings judged acceptable",
+          "detail": "A watchtower can record a finding it has already judged acceptable — a public site key that reads as a secret, a CVE in a package only ever loaded in development. An allowance removes that finding from the score and keeps it in the report, marked, with the reason it was allowed and by whom. It matches on the finding’s own fields (never a line number, which moves), and every run reports how many findings each allowance absorbed plus any that absorbed none, so an entry that has quietly stopped applying is visible rather than assumed. The list of allowances lives with the organisation that made the judgements, not in the shared engine. Allowances do not apply to duplication, whose percentage comes from the tool’s own totals rather than the list of duplicated blocks, nor to criteria that measure an absence — allowing “no rollback configured” would be accepting a risk, not correcting a false positive."
+        }
+      ],
+      "last_reviewed": "2026-07-30"
+    },
+    {
+      "id": "9",
+      "slug": "security-posture",
+      "name": "Security Posture",
+      "status": "scored",
+      "one_liner": "No exposed secrets, no known-vulnerable production dependencies, no high-severity code-security findings.",
+      "what": "Three sub-metrics: secrets committed to the repo, dependency CVEs, and static application security (SAST) findings. Together they answer: could an agent (or anyone) ship this code without introducing a security regression, and is the current tree already clean?",
+      "why": "The agentic wave keeps producing apps where security is bolted on only at launch — and then compromised. A system that is already leaking secrets or shipping vulnerable dependencies is not safe to hand to an autonomous agent. Security is the one dimension with a hard-cap. The composite is a system's seven criterion scores averaged and rescaled to 100 (bands: Red 0-40, Amber 41-70, Green 71-100); a Critical finding here multiplies that number by 0.4, so the best a capped system can score is exactly 40 and it is still Red. The cap is inside the number rather than painted over it, which is why a score and its colour can never disagree. Scaling rather than clamping keeps capped systems ranked against each other, so it is still visible which one is closest to being fixable.",
+      "how": {
+        "tools": "gitleaks (secrets), trivy fs --scanners vuln (dependency CVEs over Hex / RubyGems / npm lockfiles), semgrep --config auto (SAST, all languages incl. Elixir/Ruby/JS/Vue).",
+        "anchors": "0 confirmed exposed secrets · 0 Critical/High CVEs in direct production dependencies (CIS v8) · 0 high-severity SAST findings (OWASP Top 10 / CWE).",
+        "scoring": "Each sub-metric scores 0–5 against its anchor; the criterion is their mean. Hard-cap: any confirmed exposed secret, any Critical production-dependency CVE, or any Critical SAST finding forces the system's overall badge to Red. None of the scanners compile the target, so the scan runs headless on any clone."
+      },
+      "nuances": [
+        {
+          "title": "Shared path triage (gitleaks + semgrep)",
+          "detail": "Raw scanner output is ~99% noise: secrets in test fixtures, mocks, seed data and VCR cassettes. A shared path allowlist (test/, spec/, __mocks__/, fixtures/, priv/data/seed/, cassette_library/, config/test.exs) is excluded from BOTH gitleaks and semgrep before scoring — the same fixture noise trips both scanners. priv/static is intentionally NOT excluded (real committed keys, e.g. signing certs, live there). Raw and triaged counts are both preserved for the audit trail."
+        },
+        {
+          "title": "Secrets: confirmed vs review bucket",
+          "detail": "gitleaks' generic-api-key rule is low-precision — in config files it matches public identifiers (client IDs, Google Analytics tags, UUIDs, reCAPTCHA site keys) about as often as real secrets. So generic-api-key hits go to a REVIEW bucket that is surfaced ('N key-like strings to review') but does NOT hard-cap. High-precision rules (private keys, AWS/provider tokens) are CONFIRMED and drive the hard-cap. Real secrets still force Red; noisy generic matches are flagged for human triage instead of tanking the badge."
+        },
+        {
+          "title": "Trivy scores direct dependencies only",
+          "detail": "CVEs are attributed to their package's role, parsed from the manifests (mix.exs :only groups, package.json dependencies vs devDependencies). Direct PRODUCTION deps score at full weight and can hard-cap. Direct DEV-only deps are discounted (folded to medium, never hard-cap) — a dev-tool vuln is real but not production-reachable. TRANSITIVE deps are shown for information but are not scored — they are unactionable without their direct parent, and scoring them made every system red on noise."
+        },
+        {
+          "title": "Semgrep hardening-rule remap",
+          "detail": "Some semgrep rules flag CI/workflow hardening recommendations, not code vulnerabilities — e.g. github-actions-mutable-action-tag (non-SHA-pinned actions) and secrets-inherit. These dominate raw HIGH counts, so they are remapped to INFO. Matching is by rule-id leaf because --config auto emits ids shaped like <path>.<leaf>.<leaf>."
+        },
+        {
+          "title": "Audit trail",
+          "detail": "Every result carries a raw→triaged→allowed record per scanner (raw count, triaged count, what was excluded and why, and how many findings were allowed) so any score can be inspected back to the original finding."
+        },
+        {
+          "title": "Allowances: findings judged acceptable",
+          "detail": "A watchtower can record a finding it has already judged acceptable — a public site key that reads as a secret, a CVE in a package only ever loaded in development. An allowance removes that finding from the score and keeps it in the report, marked, with the reason it was allowed and by whom. It matches on the finding’s own fields (never a line number, which moves), and every run reports how many findings each allowance absorbed plus any that absorbed none, so an entry that has quietly stopped applying is visible rather than assumed. The list of allowances lives with the organisation that made the judgements, not in the shared engine. Allowances do not apply to duplication, whose percentage comes from the tool’s own totals rather than the list of duplicated blocks, nor to criteria that measure an absence — allowing “no rollback configured” would be accepting a risk, not correcting a false positive."
+        }
+      ],
+      "last_reviewed": "2026-07-07"
+    }
+  ]
+}

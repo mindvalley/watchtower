@@ -1,3 +1,6 @@
 node_modules/
 reports/
-data/
+# Anchored to the repo root. Unanchored, git matches this at any depth — which
+# silently dropped dashboard/public/data/criteria-docs.json, a file the board
+# reads at startup, so the published dashboard would not have started at all.
+/data/
