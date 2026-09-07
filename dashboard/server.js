@@ -10,6 +10,7 @@ const { makeVerifier } = require('./db/ingest-auth');
 const { buildAllowlist } = require('./db/allowlist');
 const { handleIngest } = require('./db/ingest');
 const { ingestConfig, displayNames } = require('./db/config');
+const { criteriaIds, criteriaSlugs } = require('./db/criteria');
 
 const PUBLIC = path.join(__dirname, 'public');
 
@@ -43,9 +44,8 @@ function ingestBodyParser() {
   });
 }
 
-const _criteriaDocs = (JSON.parse(fs.readFileSync(path.join(PUBLIC, 'data', 'criteria-docs.json'), 'utf8')).criteria || []);
-const CRITERIA_IDS = new Set(_criteriaDocs.map((c) => c.id));
-const CRITERIA_SLUGS = new Set(_criteriaDocs.map((c) => c.slug));
+const CRITERIA_IDS = criteriaIds();
+const CRITERIA_SLUGS = criteriaSlugs();
 
 function today() {
   return new Date().toISOString().slice(0, 10);
