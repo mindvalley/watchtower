@@ -21,10 +21,20 @@ inputs:
     description: Node version used to run the engine.
     required: false
     default: "20"
+  config:
+    description: >-
+      Path to the watchtower configuration, relative to the workspace. Read
+      before anything is installed so that only the toolchains the configuration
+      declares are installed. Falls back to $WATCHTOWER_CONFIG and then to
+      watchtower.config.json; if none of those can be read, every toolchain is
+      installed, which is what happened before this input existed.
+    required: false
+    default: ""
   elixir-version:
     description: >-
-      Elixir, for Credo (complexity on Elixir repos) and the two AST helpers
-      the C2 reader still uses. Required today even for non-Elixir targets.
+      Elixir, for Credo (complexity on Elixir source) and the two AST helpers
+      the C2 reader uses on Elixir systems. Installed only when a system in the
+      configuration declares the elixir stack.
     required: false
     default: "1.18"
   otp-version:
@@ -32,9 +42,23 @@ inputs:
     required: false
     default: "27"
   ruby-version:
-    description: Ruby, for Rubocop (complexity on Ruby repos).
+    description: >-
+      Ruby, for Rubocop (complexity on Ruby source). Installed only when a
+      system in the configuration declares the ruby stack.
     required: false
     default: "3.3"
+  install-elixir:
+    description: >-
+      auto | true | false. `auto` derives from the declared stacks. Force it on
+      for the one case the configuration cannot express: a repository whose
+      material languages are not the stack it is declared as — C8 measures every
+      language it finds, not the declared one.
+    required: false
+    default: "auto"
+  install-ruby:
+    description: auto | true | false. As install-elixir.
+    required: false
+    default: "auto"
 
 outputs:
   engine-path:
@@ -80,12 +104,40 @@ runs:
       working-directory: ${{ github.action_path }}
       run: npm install --no-audit --no-fund
 
+    # Ask the configuration what it needs before installing anything for it.
+    #
+    # Elixir, OTP and Ruby were installed on every run regardless, while the
+    # scanner they were installed for already read the declared stack to decide
+    # whether to use them. So an organisation with no Elixir systems built the
+    # whole BEAM toolchain and never invoked it.
+    #
+    # Deliberately after setup-node rather than first: this reads the config
+    # with the same Node the scan will run under, instead of whatever the runner
+    # image happens to ship. It costs nothing — the toolchain installs are the
+    # slow part and they are all below this.
+    #
+    # The reasoning goes to the step log. An install decision nobody can see the
+    # working for is the kind that gets blamed for an unrelated failure later.
+    - name: Which toolchains does the configuration ask for
+      id: toolchains
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        WATCHTOWER_CONFIG_INPUT: ${{ inputs.config }}
+        INSTALL_ELIXIR: ${{ inputs.install-elixir }}
+        INSTALL_RUBY: ${{ inputs.install-ruby }}
+      run: |
+        set -euo pipefail
+        node "${GITHUB_ACTION_PATH}/scripts/benchmark/required-toolchains.js"
+
     - uses: erlef/setup-beam@v1
+      if: steps.toolchains.outputs.elixir == 'true'
       with:
         otp-version: ${{ inputs.otp-version }}
         elixir-version: ${{ inputs.elixir-version }}
 
     - uses: ruby/setup-ruby@v1
+      if: steps.toolchains.outputs.ruby == 'true'
       with:
         ruby-version: ${{ inputs.ruby-version }}
 
@@ -130,10 +182,18 @@ runs:
         # Code graph for domain boundaries. Deterministic and fully offline.
         pipx install "graphifyy==${GRAPHIFY_VERSION}"
 
-        # NOT PINNED, and this is a real gap rather than a decision — see the
-        # `floating` block in scanner-pins.json. rubocop resolves to whatever is
-        # current, as does jscpd (fetched on demand via npx inside the scan), and
-        # credo is a `~> 1.7` range. So Ruby complexity, duplication and Elixir
-        # complexity can move between two runs of the SAME engine tag. Pinning
-        # them is a scoring change and wants its own re-scan.
-        gem install rubocop --no-document
+    # Rubocop needs the Ruby the step above may not have installed, so it is its
+    # own step with the same condition rather than a line inside the block
+    # above. Left in place it would fall back to the runner image's system Ruby
+    # and install a gem nothing in the run is going to call.
+    #
+    # NOT PINNED, and this is a real gap rather than a decision — see the
+    # `floating` block in scanner-pins.json. rubocop resolves to whatever is
+    # current, as does jscpd (fetched on demand via npx inside the scan), and
+    # credo is a `~> 1.7` range. So Ruby complexity, duplication and Elixir
+    # complexity can move between two runs of the SAME engine tag. Pinning them
+    # is a scoring change and wants its own re-scan.
+    - name: Install rubocop
+      if: steps.toolchains.outputs.ruby == 'true'
+      shell: bash
+      run: gem install rubocop --no-document

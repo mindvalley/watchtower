@@ -63,8 +63,10 @@ it is calibrated against travel as one unit. A caller one version behind on any
 scanner produces numbers that look comparable and are not.
 
 ```yaml
-- uses: mindvalley/watchtower-engine@v0
+- uses: mindvalley/watchtower@v1
   id: engine
+  with:
+    config: config/systems.json
 
 - run: node "${{ steps.engine.outputs.engine-path }}/scripts/benchmark/scan-security.js"
   env:
@@ -73,6 +75,29 @@ scanner produces numbers that look comparable and are not.
     WATCHTOWER_CONFIG: config/systems.json
     WATCHTOWER_REPORTS: reports
 ```
+
+### Toolchains are installed from what you declare
+
+Most of what the action installs is language-agnostic and runs on every scan.
+Two things are not:
+
+| Toolchain | Used for | Installed when |
+|---|---|---|
+| Elixir + OTP | Credo (complexity on Elixir source), and the AST helpers the C2 reader uses on Elixir systems | a system declares `"stack": "elixir"` |
+| Ruby | Rubocop (complexity on Ruby source) | a system declares `"stack": "ruby"` |
+
+Point the `config` input at your configuration and the action reads it before
+installing anything. A fleet with no Elixir in it never builds the BEAM
+toolchain. If the configuration cannot be read, or a system declares no stack,
+everything is installed — an unreadable input must not quietly become a smaller
+scan.
+
+There is one case the configuration cannot express. Complexity is measured in
+**every language the repository materially contains**, not the one it is
+declared as, so a repository declared `typescript` that also holds a few
+thousand lines of Ruby needs Rubocop. That scan fails and says so rather than
+scoring the Ruby clean; `install-ruby: true` (or `install-elixir: true`) forces
+the toolchain in without misdeclaring the stack.
 
 ### Configuration
 
@@ -109,5 +134,7 @@ exercise Elixir AST helpers and are skipped when Elixir is absent.
 ## Status
 
 Used in production by Mindvalley across three organisations. Open-sourcing
-properly — setup guide, configurable triage filters, dropping the Elixir
-prerequisite — is intended but not yet done.
+properly — setup guide, configurable triage filters — is intended but not yet
+done. The Elixir prerequisite is gone for anyone who does not declare the
+stack; the two AST helpers that need the runtime at all are still there, and
+replacing them with tree-sitter would remove it entirely.
