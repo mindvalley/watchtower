@@ -168,7 +168,19 @@ function reportsDir(systemKey) {
   return dir;
 }
 
+// What one system's code IS: a GitHub repository, or a folder on this machine.
+//
+// Here rather than in each scan program because a relative path is resolved
+// against the directory holding the config, and this is the only file that
+// knows where that is. Every scan program asking the same question has to get
+// the same answer — the alternative is seven of them each deciding for
+// themselves what a relative path is relative to.
+function systemTarget(systemKey) {
+  const { targetOf } = require('./target-tree');
+  return targetOf(systemConfig(systemKey), systemKey, path.dirname(configPath()));
+}
+
 module.exports = {
   configPath, reportsRoot, dataDir, allowancesPath,
-  loadConfig, loadAllowances, systemConfig, reportsDir,
+  loadConfig, loadAllowances, systemConfig, reportsDir, systemTarget,
 };
