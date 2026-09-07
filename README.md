@@ -155,6 +155,21 @@ skip, and change coupling reports itself unmeasured rather than clean.
 
 The temp copy is always removed afterwards, and only ever the copy.
 
+### Where the results go
+
+A configuration that declares `"publish": "ingest"` posts each system's scores
+to a dashboard's `/ingest`. One that declares nothing writes them out and posts
+nowhere — `benchmark.json` and a `findings-<system>.json` per system, under
+`WATCHTOWER_DATA`. That is the default, and it is the right one for a run on
+your own machine: a scanner should not need somewhere to publish before it will
+tell you what it found.
+
+To see those results on a board, run the dashboard locally and load them:
+
+```sh
+cd dashboard && npm run load -- path/to/data --config path/to/watchtower.config.json
+```
+
 ### Allowances
 
 See [guides/allowances.md](guides/allowances.md).
