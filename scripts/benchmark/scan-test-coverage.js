@@ -16,23 +16,19 @@
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
-const { execFileSync } = require('child_process');
 const {
   SKIP_DIRS, aggregateStack, detectThresholds, detectTool,
 } = require('./test-coverage-signals');
 const { classifyFile } = require('./layout-discovery');
 
-const { systemConfig, reportsDir } = require('./engine-config');
+const { reportsDir, systemTarget } = require('./engine-config');
+const { materialise } = require('./target-tree');
 const SYSTEM = process.env.SYSTEM;
 const { GH_TOKEN } = process.env;
 
 const SAMPLE_CAP = 20;
 const FRONTEND_MIN_FILES = 5; // fewer than this => no meaningful FE surface => omit stack (N/A)
 
-function sh(cmd, args, opts = {}) {
-  return execFileSync(cmd, args, { stdio: ['ignore', 'pipe', 'inherit'], ...opts });
-}
 function writeJson(dir, name, obj) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, `${name}.json`), `${JSON.stringify(obj, null, 2)}\n`);
@@ -102,14 +98,18 @@ function buildStack(repoDir, relFiles, stackKey, files) {
 }
 
 function main() {
-  const cfg = systemConfig(SYSTEM);
+  const tree = materialise(systemTarget(SYSTEM), { prefix: `c6-${SYSTEM}`, token: GH_TOKEN });
+  try {
+    scan(tree, reportsDir(SYSTEM));
+  } finally {
+    // Previously left on disk with the token in its .git/config.
+    tree.cleanup();
+  }
+}
 
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), `scan-c6-${SYSTEM}-`));
-  const repoDir = path.join(work, 'repo');
-  const outDir = reportsDir(SYSTEM);
-
-  const url = `https://x-access-token:${GH_TOKEN}@github.com/${cfg.repo}.git`;
-  sh('git', ['clone', '--depth', '1', url, repoDir]);
+function scan(tree, outDir) {
+  const repoDir = tree.dir;
+  for (const note of tree.notes) console.log(`  ${note}`);
 
   const relFiles = walkFiles(repoDir);
   const byStack = collectStacks(relFiles);
@@ -128,7 +128,7 @@ function main() {
   const summary = Object.entries(stacks)
     .map(([k, s]) => `${k}:${s.tested_files}/${s.source_files}${s.tooling.enforced ? `+enf(${s.tooling.thresholds.join('/')})` : s.tooling.present ? '+cfg' : ''}`)
     .join(' ');
-  console.log(`Scanned C6 ${SYSTEM} (${cfg.repo}) -> ${summary || 'no stacks'} -> ${outDir}`);
+  console.log(`Scanned C6 ${SYSTEM} (${tree.label}) -> ${summary || 'no stacks'} -> ${outDir}`);
 }
 
 if (require.main === module) {

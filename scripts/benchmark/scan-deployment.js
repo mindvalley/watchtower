@@ -11,16 +11,16 @@
  * Helm / Kustomize / Argo / Terraform / appspec) + Dockerfiles. Reads files
  * only, no compile — same private-dep sidestep as C4/C8/C9.
  *
- * Env: SYSTEM (key in benchmark.overrides.json), GH_TOKEN (clone auth).
+ * Env: SYSTEM (key in the watchtower config), GH_TOKEN (clone auth; not needed
+ * for a system declaring a local path).
  */
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
-const { execFileSync } = require('child_process');
 const SIGNALS = require('./deployment-signals');
+const { materialise } = require('./target-tree');
 
-const { systemConfig, reportsDir } = require('./engine-config');
+const { reportsDir, systemTarget } = require('./engine-config');
 const SYSTEM = process.env.SYSTEM;
 const { GH_TOKEN } = process.env;
 
@@ -29,10 +29,6 @@ const MAX_HITS = 5;
 // Files that carry deploy/CI/IaC config worth scanning for signals.
 const CONFIG_EXT = /\.(ya?ml|tf|json|toml)$/i;
 const CONFIG_HINT = /(\.github\/workflows|\.gitlab-ci|Jenkinsfile|\.circleci|azure-pipelines|k8s|kube|helm|chart|kustomiz|deploy|argo|appspec|Procfile|fly\.toml|render\.yaml|compose)/i;
-
-function sh(cmd, args, opts = {}) {
-  return execFileSync(cmd, args, { stdio: ['ignore', 'pipe', 'inherit'], ...opts });
-}
 
 function writeJson(dir, name, obj) {
   fs.mkdirSync(dir, { recursive: true });
@@ -110,14 +106,12 @@ function assessIndependence(repoDir) {
   return { deployables, deploy_paths, independent };
 }
 
-function main() {
-  const cfg = systemConfig(SYSTEM);
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), `scan-c7-${SYSTEM}-`));
-  const repoDir = path.join(work, 'repo');
-  const outDir = reportsDir(SYSTEM);
-
-  const url = `https://x-access-token:${GH_TOKEN}@github.com/${cfg.repo}.git`;
-  sh('git', ['clone', '--depth', '1', url, repoDir]);
+// Handed a tree rather than making one, so that main can remove it in a
+// `finally`. Before this the clone was simply left behind on every run — with
+// the token still in its .git/config.
+function scan(tree, outDir) {
+  const repoDir = tree.dir;
+  for (const note of tree.notes) console.log(`  ${note}`);
 
   // Candidate config files: Dockerfiles + CI/IaC config by ext or path hint.
   const files = collect(repoDir, (n, full) => (
@@ -157,7 +151,16 @@ function main() {
   const pd = report.progressive_delivery.mature.length ? 'PD:mature'
     : report.progressive_delivery.basic.length ? 'PD:basic' : 'PD:none';
   const ind = report.independent_deployability.independent ? 'indep' : 'coupled';
-  console.log(`Scanned C7 ${SYSTEM} (${cfg.repo}, ${pd}, ${ind}) -> ${outDir}`);
+  console.log(`Scanned C7 ${SYSTEM} (${tree.label}, ${pd}, ${ind}) -> ${outDir}`);
+}
+
+function main() {
+  const tree = materialise(systemTarget(SYSTEM), { prefix: `c7-${SYSTEM}`, token: GH_TOKEN });
+  try {
+    scan(tree, reportsDir(SYSTEM));
+  } finally {
+    tree.cleanup();
+  }
 }
 
 if (require.main === module) {
