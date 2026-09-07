@@ -33,9 +33,10 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 const { extractLinterJson } = require('./parse-reports');
 const { discoverLanguages } = require('./simplicity-stacks');
+const { missingToolchains, missingToolchainMessage } = require('./required-toolchains');
 const { extractScript } = require('./vue-sfc');
 const { detectGate, mentionsEslintComplexityRule, ESLINT_CONFIG_CANDIDATES } = require('./complexity-gate');
 const {
@@ -333,6 +334,22 @@ function main() {
     const { measured, unmeasured, skippedImmaterial } = discoverLanguages(locByExt);
     if (measured.length === 0) {
       throw new Error(`no material language found in ${cfg.repo} — refusing to write a meta that would score 0/0`);
+    }
+
+    // Check every complexity tool is present BEFORE running any of them. Since
+    // the action installs Elixir and Ruby only when a system declares those
+    // stacks, a repository whose material languages differ from its declared
+    // stack now arrives without the tool it needs — and the bare ENOENT that
+    // produces names `mix`, not the declaration that is missing.
+    //
+    // Up front rather than at each call so a repo missing two toolchains is told
+    // about both, and so it fails before ten minutes of jscpd and lizard.
+    const absent = missingToolchains(
+      measured,
+      (binary) => spawnSync(binary, ['--version'], { stdio: 'ignore' }).error === undefined,
+    );
+    if (absent.length > 0) {
+      throw new Error(missingToolchainMessage(absent, { systemKey: SYSTEM, declaredStack: stack }));
     }
 
     const gateInputs = readGateInputs(repoDir);
