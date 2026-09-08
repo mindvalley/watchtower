@@ -165,6 +165,90 @@ function dot(colour) {
   return `<span class="dot" style="width:12px;height:12px;background:${COLOURS[colour]}"></span>`;
 }
 
+// A button that opens a short list of formats.
+//
+// `items` is `[{ label, onSelect }]`, so what the menu offers is data and this
+// function is only the behaviour: open, close on Escape, close on a click
+// anywhere else, close after choosing. Built rather than templated because the
+// page has no build step and this is the only menu on the site.
+//
+// The parts that are not decoration: `aria-haspopup` and `aria-expanded` so a
+// screen reader is told this is a menu and whether it is open; a real <button>
+// per item so each is reachable by keyboard without inventing key handling; and
+// the outside-click listener registered on open and removed on close, because
+// one left on the document per page load is a leak that only shows up on a
+// page nobody reloads.
+function buildMenu(label, items) {
+  const wrap = document.createElement('div');
+  wrap.className = 'menu';
+
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'btn menu-trigger';
+  trigger.setAttribute('aria-haspopup', 'menu');
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.textContent = label;
+
+  const caret = document.createElement('span');
+  caret.className = 'menu-caret';
+  caret.setAttribute('aria-hidden', 'true');
+  caret.textContent = '▾';
+  trigger.appendChild(caret);
+
+  const list = document.createElement('div');
+  list.className = 'menu-list';
+  list.setAttribute('role', 'menu');
+  list.hidden = true;
+
+  function close() {
+    if (list.hidden) return;
+    list.hidden = true;
+    trigger.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('click', onDocumentClick, true);
+    document.removeEventListener('keydown', onKeydown, true);
+  }
+
+  function onDocumentClick(e) {
+    if (!wrap.contains(e.target)) close();
+  }
+
+  function onKeydown(e) {
+    if (e.key !== 'Escape') return;
+    close();
+    // Focus goes back to the thing that opened the menu, or the reader is left
+    // nowhere after dismissing it.
+    trigger.focus();
+  }
+
+  function open() {
+    if (!list.hidden) return;
+    list.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    document.addEventListener('click', onDocumentClick, true);
+    document.addEventListener('keydown', onKeydown, true);
+  }
+
+  trigger.addEventListener('click', () => (list.hidden ? open() : close()));
+
+  for (const item of items) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'menu-item';
+    button.setAttribute('role', 'menuitem');
+    button.textContent = item.label;
+    button.addEventListener('click', () => {
+      // Closed first. A format that opens a print dialog or takes a second to
+      // build would otherwise leave the menu hanging open behind it.
+      close();
+      item.onSelect();
+    });
+    list.appendChild(button);
+  }
+
+  wrap.append(trigger, list);
+  return wrap;
+}
+
 // Draw the audit trail (buildAuditTrail output) as one compact expandable block:
 // each sub-metric on a line as `dot Label score  raw → filter → triaged`.
 function renderAuditTrail(trail) {
@@ -230,12 +314,12 @@ async function initScorecard(systemKey) {
     badge.textContent = 'Not yet scored';
   }
 
-  // Two buttons, or neither. A system with no findings file has nothing to open
-  // and nothing to export, and a button that hands back an empty file is worse
+  // Two controls, or neither. A system with no findings file has nothing to open
+  // and nothing to download, and a button that hands back an empty file is worse
   // than an absent one. This is the same condition the single link used before.
   //
-  // The export needs no fetch and no route: the page already loaded the whole
-  // findings file above, which is the same file the report page draws from.
+  // Neither needs a fetch or a route: the page already loaded the whole findings
+  // file above, which is the same file the report page draws from.
   const actions = document.getElementById('report-actions');
   if (actions && findings && findings.criteria) {
     const view = document.createElement('a');
@@ -243,21 +327,35 @@ async function initScorecard(systemKey) {
     view.href = `/system/${encodeURIComponent(systemKey)}/report`;
     view.textContent = 'View report';
 
-    const csv = document.createElement('button');
-    csv.type = 'button';
-    csv.className = 'btn';
-    csv.textContent = 'Export report (CSV)';
-    csv.addEventListener('click', () => {
-      // Criterion order comes from the namespace the page is already rendering,
-      // so the file cannot disagree with the table above it.
-      FINDINGS_CSV.download(
-        document,
-        FINDINGS_CSV.toCsv(findings, CRITERIA.map((c) => c.key)),
-        FINDINGS_CSV.fileName(systemKey, findings.generated_at),
-      );
-    });
+    const reportUrl = `/system/${encodeURIComponent(systemKey)}/report`;
+    const download = buildMenu('Download report', [
+      {
+        label: 'CSV',
+        onSelect: () => FINDINGS_CSV.download(
+          document,
+          // Criterion order comes from the namespace the page is already
+          // rendering, so the file cannot disagree with the table above it.
+          FINDINGS_CSV.toCsv(findings, CRITERIA.map((c) => c.key)),
+          FINDINGS_CSV.fileName(systemKey, findings.generated_at),
+        ),
+      },
+      {
+        // PDF is the browser's own Save as PDF, pointed at the report. That
+        // makes the file the report itself rather than a reconstruction of it,
+        // and costs no dependency — the whole print appearance is the @media
+        // print block in theme.css.
+        //
+        // The report opens in its own tab and prints itself: this page cannot
+        // print the report, because the report is not on it. The tab is left
+        // open afterwards rather than closed, since closing it as the dialog
+        // appears cancels the print in some browsers, and a reader who chose
+        // "print the report" is not badly served by being left looking at it.
+        label: 'PDF',
+        onSelect: () => window.open(`${reportUrl}?print=1`, '_blank', 'noopener'),
+      },
+    ]);
 
-    actions.append(view, csv);
+    actions.append(view, download);
   }
 
   // Name the page. Eleven HTML files used to carry this as literal text —
@@ -366,6 +464,6 @@ async function initScorecard(systemKey) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     buildAuditTrail, fmtBands, fmtTotal, renderAuditTrail, initScorecard, topFindings, escHtml, fmtFindingLine,
-    systemKeyFromPath, titleCase,
+    systemKeyFromPath, titleCase, buildMenu,
   };
 }

@@ -61,6 +61,26 @@ function renderGroup(g) {
     </div>`;
 }
 
+// "Download report → PDF" on a system page opens this one with `?print=1`,
+// because that page cannot print this report — the report is not on it. The
+// appearance of the printed sheet is the `@media print` block in theme.css.
+function wantsPrint(search) {
+  return new URLSearchParams(String(search || '')).get('print') === '1';
+}
+
+// Printing before the findings are on the page produces a blank sheet, and
+// printing before the web fonts arrive produces one set in the fallback face —
+// so this is called at the END of the render, and waits for the fonts.
+// `document.fonts` is not universal and a missing one must not stop the print.
+async function printThisPage(win, doc) {
+  try {
+    if (doc.fonts && doc.fonts.ready) await doc.fonts.ready;
+  } catch (e) {
+    // A font that never resolves is not a reason to refuse to print.
+  }
+  win.print();
+}
+
 async function initReport(systemKey) {
   const back = document.getElementById('back-link');
   if (back) back.href = `/system/${systemKey}`;
@@ -106,8 +126,10 @@ async function initReport(systemKey) {
   body.innerHTML = sections || '<div class="panel" style="padding:20px;color:var(--text-muted)">No located findings for this system.</div>';
 
   if (location.hash) { const el = document.querySelector(location.hash); if (el) el.scrollIntoView(); }
+
+  if (wantsPrint(location.search)) await printThisPage(window, document);
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { itemColumns, renderGroup, esc };
+  module.exports = { itemColumns, renderGroup, esc, wantsPrint };
 }
