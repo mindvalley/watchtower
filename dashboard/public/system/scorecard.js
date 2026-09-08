@@ -11,6 +11,12 @@
 const CRITERIA = (typeof require === 'function'
   ? require('../js/criteria.js')
   : window.Criteria).CRITERIA;
+// The export builder. It lives in its own file because it is pure and worth
+// testing on its own, and because the report page orders the same fields from
+// the same list.
+const FINDINGS_CSV = (typeof require === 'function'
+  ? require('../js/findings-csv.js')
+  : window.FindingsCsv);
 const COLOURS = { green: '#3fb950', amber: '#d29922', red: '#f85149' };
 
 // /system/<key> and /system/<key>/report. One template serves every system, so
@@ -224,14 +230,34 @@ async function initScorecard(systemKey) {
     badge.textContent = 'Not yet scored';
   }
 
-  const hdr = document.querySelector('.header');
-  if (hdr && findings && findings.criteria) {
-    const a = document.createElement('a');
-    a.href = `/system/${systemKey}/report`;
-    a.className = 'back-link';
-    a.style.marginLeft = '12px';
-    a.textContent = 'View findings report →';
-    hdr.appendChild(a);
+  // Two buttons, or neither. A system with no findings file has nothing to open
+  // and nothing to export, and a button that hands back an empty file is worse
+  // than an absent one. This is the same condition the single link used before.
+  //
+  // The export needs no fetch and no route: the page already loaded the whole
+  // findings file above, which is the same file the report page draws from.
+  const actions = document.getElementById('report-actions');
+  if (actions && findings && findings.criteria) {
+    const view = document.createElement('a');
+    view.className = 'btn';
+    view.href = `/system/${encodeURIComponent(systemKey)}/report`;
+    view.textContent = 'View report';
+
+    const csv = document.createElement('button');
+    csv.type = 'button';
+    csv.className = 'btn';
+    csv.textContent = 'Export report (CSV)';
+    csv.addEventListener('click', () => {
+      // Criterion order comes from the namespace the page is already rendering,
+      // so the file cannot disagree with the table above it.
+      FINDINGS_CSV.download(
+        document,
+        FINDINGS_CSV.toCsv(findings, CRITERIA.map((c) => c.key)),
+        FINDINGS_CSV.fileName(systemKey, findings.generated_at),
+      );
+    });
+
+    actions.append(view, csv);
   }
 
   // Name the page. Eleven HTML files used to carry this as literal text —
