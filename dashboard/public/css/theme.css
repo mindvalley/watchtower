@@ -106,6 +106,19 @@
     justify-content: space-between;
     margin-bottom: 36px;
     gap: 16px;
+    /* WITHOUT THESE TWO LINES ANY MENU IN THE HEADER IS HALF UNCLICKABLE, and
+       the reason is not obvious from anything nearby.
+       `.header` carries the `rise` entry animation, which animates `transform`.
+       An animation with `fill-mode: both` leaves the computed transform as a
+       matrix rather than `none` once it has finished — so the header is a
+       stacking context permanently, and a `z-index` on anything inside it is
+       scoped to that context and cannot escape. The header's own level was
+       `auto`, so every `.section` below it in the document painted on top,
+       including over the part of an open dropdown that overhangs the first one.
+       It looked completely normal: the menu was drawn, and the lower half of it
+       silently belonged to the panel underneath. */
+    position: relative;
+    z-index: 2;
   }
   /* Logo lockup. The mark is an app-icon tile whose own corners are
      transparent, so it sits on the page background rather than in a box.
