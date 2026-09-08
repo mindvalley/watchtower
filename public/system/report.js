@@ -12,22 +12,10 @@ const REPORT_CRITERIA = [
   { key: '9', label: 'Security Posture' },
 ];
 
-// Ordered, human-friendly columns for whichever fields an item carries.
-const FIELD_ORDER = ['pillar', 'sub', 'file', 'path', 'fileA', 'fileB', 'line', 'lines', 'scope', 'rule', 'id', 'package', 'installed', 'fixed', 'severity', 'bucket', 'type', 'undescribed', 'stack', 'status', 'rung', 'cc', 'allowed_reason', 'evidence'];
-
-// A field is "present" if any item carries a non-empty value for it. Empty arrays
-// (e.g. evidence: []) count as absent so they don't render a blank column.
-function hasValue(v) {
-  if (v == null || v === '') return false;
-  if (Array.isArray(v) && v.length === 0) return false;
-  return true;
-}
-
-function itemColumns(items) {
-  const present = new Set();
-  items.forEach((it) => Object.keys(it).forEach((k) => { if (hasValue(it[k])) present.add(k); }));
-  return FIELD_ORDER.filter((k) => present.has(k)).concat([...present].filter((k) => !FIELD_ORDER.includes(k)));
-}
+// Column ordering, shared with the CSV and PDF exports.
+const { itemColumns } = (typeof require === 'function'
+  ? require('../js/findings-columns.js')
+  : window.FindingsColumns);
 
 function cell(v) {
   if (Array.isArray(v)) return v.join(', ');

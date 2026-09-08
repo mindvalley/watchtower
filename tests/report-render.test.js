@@ -37,3 +37,4 @@ test('renderGroup leaves an ordinary group undimmed', () => {
   assert.ok(!/opacity/.test(html), 'only an allowed group should be dimmed');
   assert.ok(!/not counted/.test(html));
 });
+

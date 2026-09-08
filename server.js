@@ -14,6 +14,19 @@ const { criteriaIds, criteriaSlugs } = require('./db/criteria');
 
 const PUBLIC = path.join(__dirname, 'public');
 
+// The PDF export's libraries, served from node_modules rather than vendored
+// into public/, so the versions stay in the lockfile for `npm audit`. Named one
+// file each: exposing a directory would publish whatever else they ship.
+//
+// Resolved via each package's entry point — neither manifest exports the UMD
+// bundle by subpath, and a hand-written node_modules path breaks under hoisting.
+const vendorFile = (pkg, file) => path.join(path.dirname(require.resolve(pkg)), file);
+
+const VENDOR_SCRIPTS = {
+  '/vendor/jspdf.umd.min.js': vendorFile('jspdf', 'jspdf.umd.min.js'),
+  '/vendor/jspdf.plugin.autotable.min.js': vendorFile('jspdf-autotable', 'jspdf.plugin.autotable.min.js'),
+};
+
 // There is no list of systems here any more. It used to be eleven keys in an
 // array — the fleet, compiled into the web server — which decided both which
 // pages existed and which data endpoints answered. The database knows which
@@ -140,6 +153,10 @@ function createApp(deps = {}) {
   });
 
   app.use(express.static(PUBLIC));
+
+  for (const [route, file] of Object.entries(VENDOR_SCRIPTS)) {
+    app.get(route, (req, res, next) => res.sendFile(file, (err) => err && next()));
+  }
 
   app.get('/criteria/:slug', (req, res, next) => {
     if (!CRITERIA_SLUGS.has(req.params.slug)) return res.status(404).send('Not found');
