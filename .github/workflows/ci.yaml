@@ -1,12 +1,9 @@
 name: Tests
 
-# The engine had no CI. Its tests existed, and an `npm test` script ran them,
-# but nothing ran that script on a change — they were only ever executed inside
-# the private repository the engine grew up in. So the moment that repository
-# stopped keeping a copy of the engine, the tests for the code three
-# organisations score themselves with would have run nowhere at all.
+# Scores move when this code moves: a change here changes every board.
 #
-# Scores move when this code moves. A change here changes every board.
+# One job per half of the repository. Neither is filtered by path — a filter is
+# how a half stops being watched, which has already happened twice here.
 
 on:
   push:
@@ -17,7 +14,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  scanner:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -33,3 +30,42 @@ jobs:
       - run: npm ci --no-audit --no-fund
 
       - run: npm test
+
+  dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: dashboard
+
+    # Required: the integration tests skip without DATABASE_URL and the run goes
+    # green having checked nothing. They migrate their own schema, so a running
+    # Postgres is all they need. Same image as the compose file we ship.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v6
+
+      # The board asks for 22 or newer; the scanner runs on 20.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - run: npm ci --no-audit --no-fund
+
+      - run: npm test
+        env:
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
