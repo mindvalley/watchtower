@@ -7,6 +7,17 @@ name: Tests
 # organisations score themselves with would have run nowhere at all.
 #
 # Scores move when this code moves. A change here changes every board.
+#
+# THE SAME THING THEN HAPPENED TO THE DASHBOARD, and it was known at the moment
+# it happened rather than discovered later. The board moved into this repository
+# on 7 September with a full suite of its own, and this workflow ran
+# `tests/benchmark/*.test.js` — the scanner's tests and nothing else. The first
+# pull request to change the board substantially passed in eleven seconds,
+# having run none of it.
+#
+# So there are two jobs. Neither is filtered by path: a filter is how a half
+# stops being watched, which is the failure this file already exists to describe
+# once.
 
 on:
   push:
@@ -17,7 +28,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  scanner:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -33,3 +44,48 @@ jobs:
       - run: npm ci --no-audit --no-fund
 
       - run: npm test
+
+  dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: dashboard
+
+    # WITHOUT THIS SERVICE THE SUITE IS HALF A SUITE. Every integration test
+    # begins `const skip = !process.env.DATABASE_URL`, so a run with no database
+    # skips them and reports zero failures — the shape of green that means
+    # nothing was checked. The tests migrate their own schema, one per file, so
+    # a running Postgres is all they need.
+    #
+    # 18-alpine matches the compose file the package ships for local use, so a
+    # contributor's machine and this runner are the same database.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v6
+
+      # The board asks for 22 or newer; the scanner runs on 20. They are
+      # separate jobs partly for this reason.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - run: npm ci --no-audit --no-fund
+
+      - run: npm test
+        env:
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
