@@ -11,6 +11,16 @@
 const CRITERIA = (typeof require === 'function'
   ? require('../js/criteria.js')
   : window.Criteria).CRITERIA;
+// The export builders, and the column ordering all three surfaces share.
+const FINDINGS_CSV = (typeof require === 'function'
+  ? require('../js/findings-csv.js')
+  : window.FindingsCsv);
+const FINDINGS_PDF = (typeof require === 'function'
+  ? require('../js/findings-pdf.js')
+  : window.FindingsPdf);
+const FINDINGS_COLUMNS = (typeof require === 'function'
+  ? require('../js/findings-columns.js')
+  : window.FindingsColumns);
 const COLOURS = { green: '#3fb950', amber: '#d29922', red: '#f85149' };
 
 // /system/<key> and /system/<key>/report. One template serves every system, so
@@ -159,6 +169,78 @@ function dot(colour) {
   return `<span class="dot" style="width:12px;height:12px;background:${COLOURS[colour]}"></span>`;
 }
 
+// A button that opens a short list of formats. `items` is
+// `[{ label, onSelect }]`; this supplies only the behaviour — open, close on
+// Escape, on an outside click, and after choosing.
+function buildMenu(label, items) {
+  const wrap = document.createElement('div');
+  wrap.className = 'menu';
+
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'btn menu-trigger';
+  trigger.setAttribute('aria-haspopup', 'menu');
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.textContent = label;
+
+  const caret = document.createElement('span');
+  caret.className = 'menu-caret';
+  caret.setAttribute('aria-hidden', 'true');
+  caret.textContent = '▾';
+  trigger.appendChild(caret);
+
+  const list = document.createElement('div');
+  list.className = 'menu-list';
+  list.setAttribute('role', 'menu');
+  list.hidden = true;
+
+  function close() {
+    if (list.hidden) return;
+    list.hidden = true;
+    trigger.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('click', onDocumentClick, true);
+    document.removeEventListener('keydown', onKeydown, true);
+  }
+
+  function onDocumentClick(e) {
+    if (!wrap.contains(e.target)) close();
+  }
+
+  function onKeydown(e) {
+    if (e.key !== 'Escape') return;
+    close();
+    // Or the reader is left nowhere after dismissing it.
+    trigger.focus();
+  }
+
+  function open() {
+    if (!list.hidden) return;
+    list.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    document.addEventListener('click', onDocumentClick, true);
+    document.addEventListener('keydown', onKeydown, true);
+  }
+
+  trigger.addEventListener('click', () => (list.hidden ? open() : close()));
+
+  for (const item of items) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'menu-item';
+    button.setAttribute('role', 'menuitem');
+    button.textContent = item.label;
+    button.addEventListener('click', () => {
+      // Closed first: building a PDF takes a moment.
+      close();
+      item.onSelect();
+    });
+    list.appendChild(button);
+  }
+
+  wrap.append(trigger, list);
+  return wrap;
+}
+
 // Draw the audit trail (buildAuditTrail output) as one compact expandable block:
 // each sub-metric on a line as `dot Label score  raw → filter → triaged`.
 function renderAuditTrail(trail) {
@@ -224,14 +306,55 @@ async function initScorecard(systemKey) {
     badge.textContent = 'Not yet scored';
   }
 
-  const hdr = document.querySelector('.header');
-  if (hdr && findings && findings.criteria) {
-    const a = document.createElement('a');
-    a.href = `/system/${systemKey}/report`;
-    a.className = 'back-link';
-    a.style.marginLeft = '12px';
-    a.textContent = 'View findings report →';
-    hdr.appendChild(a);
+  // Both or neither: a system with no findings has nothing to download. Neither
+  // needs a fetch — the page loaded the findings file above.
+  const actions = document.getElementById('report-actions');
+  if (actions && findings && findings.criteria) {
+    const view = document.createElement('a');
+    view.className = 'btn';
+    view.href = `/system/${encodeURIComponent(systemKey)}/report`;
+    view.textContent = 'View report';
+
+    // From the namespace the page is rendering, so a download cannot disagree
+    // with the table above it.
+    const order = CRITERIA.map((c) => c.key);
+    const meta = { system: systemKey, generatedAt: findings.generated_at };
+
+    // The PDF fetches its libraries on first use, so a dead network is the
+    // likeliest failure here and must not look like nothing happening.
+    const failed = (label, err) => {
+      console.error(`${label} export failed:`, err);
+      const banner = document.getElementById('page-banner');
+      if (!banner) return;
+      banner.style.display = 'flex';
+      banner.classList.add('is-danger');
+      document.getElementById('page-banner-text').textContent = `The ${label} download could not be produced. Check your connection and try again.`;
+    };
+
+    const download = buildMenu('Download report', [
+      {
+        label: 'CSV',
+        onSelect: () => {
+          try {
+            FINDINGS_CSV.download(
+              document,
+              FINDINGS_CSV.toCsv(findings, order),
+              FINDINGS_COLUMNS.fileName(systemKey, findings.generated_at, 'csv'),
+            );
+          } catch (err) { failed('CSV', err); }
+        },
+      },
+      {
+        // Built here rather than via the browser's Save as PDF, whose Save
+        // does nothing. The print stylesheet stays for the print shortcut.
+        label: 'PDF',
+        onSelect: () => FINDINGS_PDF
+          .download(window, document, findings, order, meta)
+          .catch((err) => failed('PDF', err)),
+      },
+    ]);
+
+    actions.append(view, download);
   }
 
   // Name the page. Eleven HTML files used to carry this as literal text —
@@ -340,6 +463,6 @@ async function initScorecard(systemKey) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     buildAuditTrail, fmtBands, fmtTotal, renderAuditTrail, initScorecard, topFindings, escHtml, fmtFindingLine,
-    systemKeyFromPath, titleCase,
+    systemKeyFromPath, titleCase, buildMenu,
   };
 }

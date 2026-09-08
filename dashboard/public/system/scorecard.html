@@ -15,6 +15,9 @@
 <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
 <script src="/js/loading.js"></script>
 <script src="/js/criteria.js"></script>
+<script src="/js/findings-columns.js"></script>
+<script src="/js/findings-csv.js"></script>
+<script src="/js/findings-pdf.js"></script>
 </head>
 <body>
 <div class="page">
@@ -32,7 +35,11 @@
       <div class="header-title" id="header-title">&nbsp;</div>
       <div class="header-sub" id="header-sub">&nbsp;</div>
     </div>
-    <div id="score-badge" class="header-badge">Loading...</div>
+    <div class="header-side">
+      <div id="score-badge" class="header-badge">Loading...</div>
+      <!-- Filled in by scorecard.js, only when the system has findings. -->
+      <div id="report-actions" class="report-actions"></div>
+    </div>
   </header>
 
   <main>
