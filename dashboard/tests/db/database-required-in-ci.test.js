@@ -4,24 +4,11 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 
-// A SUITE THAT SKIPS IS NOT A SUITE, and this folder is built to skip.
+// The integration tests here skip without DATABASE_URL, which is right on a
+// laptop and useless in CI — no database, no failures, green.
 //
-// Every integration test here opens with `const skip = !process.env.DATABASE_URL`.
-// On a laptop that is right: cloning this package and running its tests should
-// not require standing up a database first. In CI it is the difference between
-// a check and the shape of one — no database, no failures, green.
-//
-// The two halves of the problem are separate and both are handled here:
-//
-//   In CI, a missing database is a FAILURE. If the service block is removed,
-//   renamed, or fails to come up, this goes red rather than the run going green
-//   over a suite that inspected nothing.
-//
-//   On a laptop, a missing database is announced. The node test runner's summary
-//   line reports a skip count and not one word about what was skipped, so a
-//   local `npm test` reading "0 failures" has been the exact way a change
-//   reached a pull request with a check it had never run. This prints the file
-//   names, which is the cheapest possible version of saying so.
+// So: in CI a missing database fails. On a laptop it is announced, because the
+// test runner reports a skip count and not one word about what was skipped.
 
 const DIR = __dirname;
 
@@ -36,8 +23,7 @@ function integrationFiles() {
 test('in CI there must be a database, or the integration tests silently do not run', () => {
   const files = integrationFiles();
 
-  // Not a vacuous pass: if the skip guard is ever spelled differently this
-  // finds nothing and says so, rather than quietly guarding an empty list.
+  // Not a vacuous pass: a differently-spelled skip guard finds nothing here.
   assert.ok(files.length > 0, 'no integration test files found — this guard is looking for the wrong thing');
 
   if (process.env.DATABASE_URL) return;

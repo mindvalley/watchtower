@@ -1,23 +1,9 @@
 name: Tests
 
-# The engine had no CI. Its tests existed, and an `npm test` script ran them,
-# but nothing ran that script on a change — they were only ever executed inside
-# the private repository the engine grew up in. So the moment that repository
-# stopped keeping a copy of the engine, the tests for the code three
-# organisations score themselves with would have run nowhere at all.
+# Scores move when this code moves: a change here changes every board.
 #
-# Scores move when this code moves. A change here changes every board.
-#
-# THE SAME THING THEN HAPPENED TO THE DASHBOARD, and it was known at the moment
-# it happened rather than discovered later. The board moved into this repository
-# on 7 September with a full suite of its own, and this workflow ran
-# `tests/benchmark/*.test.js` — the scanner's tests and nothing else. The first
-# pull request to change the board substantially passed in eleven seconds,
-# having run none of it.
-#
-# So there are two jobs. Neither is filtered by path: a filter is how a half
-# stops being watched, which is the failure this file already exists to describe
-# once.
+# One job per half of the repository. Neither is filtered by path — a filter is
+# how a half stops being watched, which has already happened twice here.
 
 on:
   push:
@@ -52,14 +38,9 @@ jobs:
       run:
         working-directory: dashboard
 
-    # WITHOUT THIS SERVICE THE SUITE IS HALF A SUITE. Every integration test
-    # begins `const skip = !process.env.DATABASE_URL`, so a run with no database
-    # skips them and reports zero failures — the shape of green that means
-    # nothing was checked. The tests migrate their own schema, one per file, so
-    # a running Postgres is all they need.
-    #
-    # 18-alpine matches the compose file the package ships for local use, so a
-    # contributor's machine and this runner are the same database.
+    # Required: the integration tests skip without DATABASE_URL and the run goes
+    # green having checked nothing. They migrate their own schema, so a running
+    # Postgres is all they need. Same image as the compose file we ship.
     services:
       postgres:
         image: postgres:18-alpine
@@ -78,8 +59,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # The board asks for 22 or newer; the scanner runs on 20. They are
-      # separate jobs partly for this reason.
+      # The board asks for 22 or newer; the scanner runs on 20.
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
