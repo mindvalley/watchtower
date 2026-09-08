@@ -11,12 +11,18 @@
 const CRITERIA = (typeof require === 'function'
   ? require('../js/criteria.js')
   : window.Criteria).CRITERIA;
-// The export builder. It lives in its own file because it is pure and worth
+// The two export builders. They live in their own files because each is worth
 // testing on its own, and because the report page orders the same fields from
-// the same list.
+// the same list they both read.
 const FINDINGS_CSV = (typeof require === 'function'
   ? require('../js/findings-csv.js')
   : window.FindingsCsv);
+const FINDINGS_PDF = (typeof require === 'function'
+  ? require('../js/findings-pdf.js')
+  : window.FindingsPdf);
+const FINDINGS_COLUMNS = (typeof require === 'function'
+  ? require('../js/findings-columns.js')
+  : window.FindingsColumns);
 const COLOURS = { green: '#3fb950', amber: '#d29922', red: '#f85149' };
 
 // /system/<key> and /system/<key>/report. One template serves every system, so
@@ -327,31 +333,52 @@ async function initScorecard(systemKey) {
     view.href = `/system/${encodeURIComponent(systemKey)}/report`;
     view.textContent = 'View report';
 
-    const reportUrl = `/system/${encodeURIComponent(systemKey)}/report`;
+    // Criterion order comes from the namespace the page is already rendering,
+    // so neither download can disagree with the table above it.
+    const order = CRITERIA.map((c) => c.key);
+    const meta = { system: systemKey, generatedAt: findings.generated_at };
+
+    // A format that fails should say so where the reader is looking. The PDF
+    // fetches two libraries the first time it is used, and a dead network there
+    // is the likeliest failure on this page — silently doing nothing would read
+    // exactly like the broken print dialog this replaced.
+    const failed = (label, err) => {
+      console.error(`${label} export failed:`, err);
+      const banner = document.getElementById('page-banner');
+      if (!banner) return;
+      banner.style.display = 'flex';
+      banner.classList.add('is-danger');
+      document.getElementById('page-banner-text').textContent = `The ${label} download could not be produced. Check your connection and try again.`;
+    };
+
     const download = buildMenu('Download report', [
       {
         label: 'CSV',
-        onSelect: () => FINDINGS_CSV.download(
-          document,
-          // Criterion order comes from the namespace the page is already
-          // rendering, so the file cannot disagree with the table above it.
-          FINDINGS_CSV.toCsv(findings, CRITERIA.map((c) => c.key)),
-          FINDINGS_CSV.fileName(systemKey, findings.generated_at),
-        ),
+        onSelect: () => {
+          try {
+            FINDINGS_CSV.download(
+              document,
+              FINDINGS_CSV.toCsv(findings, order),
+              FINDINGS_COLUMNS.fileName(systemKey, findings.generated_at, 'csv'),
+            );
+          } catch (err) { failed('CSV', err); }
+        },
       },
       {
-        // PDF is the browser's own Save as PDF, pointed at the report. That
-        // makes the file the report itself rather than a reconstruction of it,
-        // and costs no dependency — the whole print appearance is the @media
-        // print block in theme.css.
+        // A real file rather than the browser's print dialog. Save as PDF was
+        // built first and was the cheaper answer by far — no dependency, and
+        // the PDF would have been the report itself — but its Save did nothing,
+        // both from a tab opened here and from the print shortcut pressed on
+        // the report page with no script involved. The document was fine;
+        // rendering the same page headlessly produced a valid PDF. That leaves
+        // the interactive print path, which this code cannot reach or repair.
         //
-        // The report opens in its own tab and prints itself: this page cannot
-        // print the report, because the report is not on it. The tab is left
-        // open afterwards rather than closed, since closing it as the dialog
-        // appears cancels the print in some browsers, and a reader who chose
-        // "print the report" is not badly served by being left looking at it.
+        // The print stylesheet stays: it is what makes that path good for
+        // anyone whose browser does print.
         label: 'PDF',
-        onSelect: () => window.open(`${reportUrl}?print=1`, '_blank', 'noopener'),
+        onSelect: () => FINDINGS_PDF
+          .download(window, document, findings, order, meta)
+          .catch((err) => failed('PDF', err)),
       },
     ]);
 

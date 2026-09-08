@@ -1,7 +1,7 @@
 // tests/report-render.test.js
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { renderGroup, esc, wantsPrint } = require('../public/system/report.js');
+const { renderGroup, esc } = require('../public/system/report.js');
 
 test('esc escapes HTML metacharacters', () => {
   assert.strictEqual(esc('<script>&"\'</script>'), '&lt;script&gt;&amp;&quot;&#39;&lt;/script&gt;');
@@ -38,15 +38,3 @@ test('renderGroup leaves an ordinary group undimmed', () => {
   assert.ok(!/not counted/.test(html));
 });
 
-test('the print flag is read from the query string, and only when it says so', () => {
-  // A system page opens this one with ?print=1. Anything else must render
-  // normally: a page that prints itself when a reader did not ask is worse
-  // than one that never prints.
-  assert.strictEqual(wantsPrint('?print=1'), true);
-  assert.strictEqual(wantsPrint('?a=b&print=1'), true);
-  assert.strictEqual(wantsPrint('?print=0'), false);
-  assert.strictEqual(wantsPrint('?print'), false);
-  assert.strictEqual(wantsPrint('?printer=1'), false);
-  assert.strictEqual(wantsPrint(''), false);
-  assert.strictEqual(wantsPrint(undefined), false);
-});

@@ -19,10 +19,20 @@
 // second file. See tests/shared-scripts.test.js.
 (function attachFindingsCsv() {
 
-// Ordered, human-friendly column order for whichever fields the items carry.
-// This lives here rather than in report.js because both the page and the export
-// order the same fields, and two copies of one list is how they drift.
-const FIELD_ORDER = ['pillar', 'sub', 'file', 'path', 'fileA', 'fileB', 'line', 'lines', 'scope', 'rule', 'id', 'package', 'installed', 'fixed', 'severity', 'bucket', 'type', 'undescribed', 'stack', 'status', 'rung', 'cc', 'allowed_reason', 'evidence'];
+// Resolved on first use rather than at load. A top-level read means this file
+// only defines its namespace if a sibling tag came first, so a mis-ordered
+// <script> would leave the page script holding `undefined` with nothing said
+// about why. This way the file always registers, and a genuinely missing
+// sibling fails loudly at the moment somebody asks for a download.
+let COLUMNS_CACHE = null;
+function columns() {
+  if (COLUMNS_CACHE) return COLUMNS_CACHE;
+  COLUMNS_CACHE = (typeof require === 'function')
+    ? require('./findings-columns.js')
+    : (typeof window !== 'undefined' ? window.FindingsColumns : null);
+  if (!COLUMNS_CACHE) throw new Error('findings-columns.js must be loaded before this one');
+  return COLUMNS_CACHE;
+}
 
 // The three columns in front of every row. The disposition matters more than
 // it looks: an allowed finding is on the report and NOT in the score, and a
@@ -32,29 +42,11 @@ const FIELD_ORDER = ['pillar', 'sub', 'file', 'path', 'fileA', 'fileB', 'line', 
 // The names are long because the short ones are taken. A deployment-capability
 // item carries its own `sub`, and a SAST item carries its own `disposition` —
 // so `sub` and `disposition` as lead columns would each appear twice in the
-// header with the group's value winning, silently deleting the item's. Both
-// collisions are in today's real data and neither was in the fixture that was
-// written first; `LEAD_COLUMNS must not collide with any item field` is the
-// test that keeps it that way.
+// header, with the group's value winning and the item's silently deleted. Both
+// collisions are in today's real data and neither was in the fixture written
+// first; `LEAD_COLUMNS must not collide with any item field` is the test that
+// keeps it that way.
 const LEAD_COLUMNS = ['criterion', 'sub_metric', 'sub_metric_disposition'];
-
-// A field is "present" if any item carries a non-empty value for it. An empty
-// array counts as absent, so `evidence: []` does not add a column of nothing.
-function hasValue(v) {
-  if (v == null || v === '') return false;
-  if (Array.isArray(v) && v.length === 0) return false;
-  return true;
-}
-
-// Fields the items actually use, in FIELD_ORDER first and anything unrecognised
-// after it. An unknown field is appended rather than dropped: a scanner that
-// starts emitting something new should show up in the export on the day it does,
-// not on the day somebody remembers to add it to the list above.
-function itemColumns(items) {
-  const present = new Set();
-  items.forEach((it) => Object.keys(it).forEach((k) => { if (hasValue(it[k])) present.add(k); }));
-  return FIELD_ORDER.filter((k) => present.has(k)).concat([...present].filter((k) => !FIELD_ORDER.includes(k)));
-}
 
 // Every row the report would draw, in the order the report draws them, each
 // tagged with the criterion and group it came from.
@@ -87,13 +79,6 @@ function flattenFindings(data, criteriaOrder) {
   return rows;
 }
 
-// A cell's text before quoting. Arrays are joined, because `evidence` is a list
-// and a spreadsheet cell is not.
-function cellText(v) {
-  if (Array.isArray(v)) return v.join('; ');
-  return String(v == null ? '' : v);
-}
-
 // Excel, Sheets and LibreOffice treat a cell beginning = + - @ (or a leading
 // tab / carriage return) as a formula. Findings data carries paths, rule ids
 // and package names out of repositories we do not control — the same
@@ -111,7 +96,7 @@ function neutralise(text) {
 // also quote every empty cell, which reads as `""` in a diff and in every
 // text editor.
 function csvCell(v) {
-  const text = neutralise(cellText(v));
+  const text = neutralise(columns().cellText(v));
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
@@ -123,7 +108,7 @@ function csvRow(values) {
 // what Excel expects.
 function toCsv(data, criteriaOrder) {
   const rows = flattenFindings(data, criteriaOrder);
-  const cols = itemColumns(rows.map((r) => r.item));
+  const cols = columns().itemColumns(rows.map((r) => r.item));
   const header = LEAD_COLUMNS.concat(cols);
   const lines = [csvRow(header)];
   for (const r of rows) {
@@ -132,15 +117,6 @@ function toCsv(data, criteriaOrder) {
     ))));
   }
   return `${lines.join('\r\n')}\r\n`;
-}
-
-// `findings-<system>-<date>.csv`. The date is the scan's, not today's — the
-// file is a record of a scan, and two exports of one scan should be the same
-// file rather than two files that look like two scans.
-function fileName(systemKey, generatedAt) {
-  const day = String(generatedAt || '').slice(0, 10);
-  const safe = String(systemKey || 'system').replace(/[^A-Za-z0-9._-]/g, '-');
-  return day ? `findings-${safe}-${day}.csv` : `findings-${safe}.csv`;
 }
 
 // Hand the browser a file. The BOM is for Excel, which otherwise reads a UTF-8
@@ -164,7 +140,7 @@ function download(doc, csv, name) {
 }
 
 const api = {
-  FIELD_ORDER, LEAD_COLUMNS, itemColumns, flattenFindings, csvCell, csvRow, toCsv, fileName, download, neutralise,
+  LEAD_COLUMNS, flattenFindings, csvCell, csvRow, toCsv, download, neutralise,
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 if (typeof window !== 'undefined') window.FindingsCsv = api;

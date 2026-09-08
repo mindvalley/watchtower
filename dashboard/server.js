@@ -14,6 +14,28 @@ const { criteriaIds, criteriaSlugs } = require('./db/criteria');
 
 const PUBLIC = path.join(__dirname, 'public');
 
+// The PDF export's two libraries, served straight out of node_modules rather
+// than committed into public/ as minified blobs. That keeps the versions in the
+// lockfile where `npm audit` can see them — this tool scores other people's
+// dependency hygiene and has no business carrying a vendored copy nobody
+// updates. The page loads them on demand, so nothing pays for the ~440 kB
+// unless somebody asks for a PDF.
+//
+// Named one file each. Exposing a directory would publish whatever else those
+// packages happen to ship.
+// Resolved through each package's own entry point and then across to the
+// browser build beside it. Asking for the file by subpath does not work:
+// `exports` in both manifests declares which paths are importable, and the UMD
+// bundles are not among them — a deliberate restriction on their part, not a
+// gap to route around with a hand-written node_modules path that breaks the
+// first time a package is hoisted differently.
+const vendorFile = (pkg, file) => path.join(path.dirname(require.resolve(pkg)), file);
+
+const VENDOR_SCRIPTS = {
+  '/vendor/jspdf.umd.min.js': vendorFile('jspdf', 'jspdf.umd.min.js'),
+  '/vendor/jspdf.plugin.autotable.min.js': vendorFile('jspdf-autotable', 'jspdf.plugin.autotable.min.js'),
+};
+
 // There is no list of systems here any more. It used to be eleven keys in an
 // array — the fleet, compiled into the web server — which decided both which
 // pages existed and which data endpoints answered. The database knows which
@@ -140,6 +162,10 @@ function createApp(deps = {}) {
   });
 
   app.use(express.static(PUBLIC));
+
+  for (const [route, file] of Object.entries(VENDOR_SCRIPTS)) {
+    app.get(route, (req, res, next) => res.sendFile(file, (err) => err && next()));
+  }
 
   app.get('/criteria/:slug', (req, res, next) => {
     if (!CRITERIA_SLUGS.has(req.params.slug)) return res.status(404).send('Not found');

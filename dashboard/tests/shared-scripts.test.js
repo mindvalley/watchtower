@@ -97,7 +97,7 @@ test('a shared script leaks nothing into global scope but its namespace', () => 
   // breaks whichever page-level script happens to pick the same word.
   // SampleTrends is temporary — it holds the invented numbers behind the trend
   // charts and goes when they are real. It obeys the same rule while it is here.
-  const ALLOWED = new Set(['Loading', 'Criteria', 'SampleTrends', 'FindingsCsv']);
+  const ALLOWED = new Set(['Loading', 'Criteria', 'SampleTrends', 'FindingsCsv', 'FindingsColumns', 'FindingsPdf']);
   for (const file of fs.readdirSync(path.join(PUBLIC, 'js'))) {
     if (!file.endsWith('.js')) continue;
     const ctx = browserish();

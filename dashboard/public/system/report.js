@@ -14,13 +14,13 @@ const REPORT_CRITERIA = [
 
 // Ordered, human-friendly columns for whichever fields an item carries.
 //
-// This page and the CSV export order the same fields, and both the list and the
-// function reading it used to be written out twice — once here and once there.
-// Two copies of one ordering is how a table and its download start disagreeing
-// about where a column goes, so there is one copy, in the export module.
+// This page, the CSV export and the PDF export order the same fields, and the
+// list was written out twice before the third one arrived. Copies of one
+// ordering are how a table and its downloads start disagreeing about where a
+// column goes, so there is one, in findings-columns.js.
 const { itemColumns } = (typeof require === 'function'
-  ? require('../js/findings-csv.js')
-  : window.FindingsCsv);
+  ? require('../js/findings-columns.js')
+  : window.FindingsColumns);
 
 function cell(v) {
   if (Array.isArray(v)) return v.join(', ');
@@ -59,26 +59,6 @@ function renderGroup(g) {
       <div style="font-size:var(--fs-xs);font-weight:600;color:${headingColour};margin-bottom:4px">${esc(g.label || g.sub)}${disp} · ${items.length}</div>
       <div class="panel" style="${panelStyle}"><table style="border-collapse:collapse;width:100%"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>
     </div>`;
-}
-
-// "Download report → PDF" on a system page opens this one with `?print=1`,
-// because that page cannot print this report — the report is not on it. The
-// appearance of the printed sheet is the `@media print` block in theme.css.
-function wantsPrint(search) {
-  return new URLSearchParams(String(search || '')).get('print') === '1';
-}
-
-// Printing before the findings are on the page produces a blank sheet, and
-// printing before the web fonts arrive produces one set in the fallback face —
-// so this is called at the END of the render, and waits for the fonts.
-// `document.fonts` is not universal and a missing one must not stop the print.
-async function printThisPage(win, doc) {
-  try {
-    if (doc.fonts && doc.fonts.ready) await doc.fonts.ready;
-  } catch (e) {
-    // A font that never resolves is not a reason to refuse to print.
-  }
-  win.print();
 }
 
 async function initReport(systemKey) {
@@ -126,10 +106,8 @@ async function initReport(systemKey) {
   body.innerHTML = sections || '<div class="panel" style="padding:20px;color:var(--text-muted)">No located findings for this system.</div>';
 
   if (location.hash) { const el = document.querySelector(location.hash); if (el) el.scrollIntoView(); }
-
-  if (wantsPrint(location.search)) await printThisPage(window, document);
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { itemColumns, renderGroup, esc, wantsPrint };
+  module.exports = { itemColumns, renderGroup, esc };
 }

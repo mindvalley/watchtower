@@ -10,9 +10,9 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const {
-  toCsv, flattenFindings, itemColumns, csvCell, csvRow, fileName, neutralise,
-  LEAD_COLUMNS, FIELD_ORDER,
+  toCsv, flattenFindings, csvCell, csvRow, neutralise, LEAD_COLUMNS,
 } = require('../public/js/findings-csv.js');
+const { itemColumns, fileName, FIELD_ORDER } = require('../public/js/findings-columns.js');
 
 // The order the scorecard and report pages show criteria in.
 const ORDER = ['2', '4', '6', '7', '8', '9'];
@@ -244,12 +244,12 @@ test('no findings produces a header and nothing else, rather than throwing', () 
 test('the file is named for the scan, not for today', () => {
   // Two exports of one scan should be the same file, not two files that look
   // like two scans.
-  assert.strictEqual(fileName('billing', '2026-09-08T04:17:00Z'), 'findings-billing-2026-09-08.csv');
-  assert.strictEqual(fileName('billing', ''), 'findings-billing.csv');
+  assert.strictEqual(fileName('billing', '2026-09-08T04:17:00Z', 'csv'), 'findings-billing-2026-09-08.csv');
+  assert.strictEqual(fileName('billing', '', 'csv'), 'findings-billing.csv');
 });
 
 test('a system key cannot put a path into the filename', () => {
-  const name = fileName('../../etc/passwd', '2026-09-08');
+  const name = fileName('../../etc/passwd', '2026-09-08', 'csv');
   assert.ok(!name.includes('/'), 'no separator may survive');
   assert.strictEqual(name, 'findings-..-..-etc-passwd-2026-09-08.csv');
 });
