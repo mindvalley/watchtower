@@ -1,11 +1,5 @@
-// tests/findings-csv.test.js
-//
-// The export is one flat table built from a report that is eleven tables, so
-// the things worth pinning are: no item is lost, every row says which table it
-// came from, and the text survives being written and read back. The last one is
-// checked by parsing the output rather than by matching substrings — a quoting
-// bug that produces plausible-looking text is exactly what a substring assertion
-// waves through.
+// The output is parsed back rather than matched against substrings: a quoting
+// bug produces plausible-looking text that a substring assertion waves through.
 
 const { test } = require('node:test');
 const assert = require('node:assert');
@@ -17,8 +11,7 @@ const { itemColumns, fileName, FIELD_ORDER } = require('../public/js/findings-co
 // The order the scorecard and report pages show criteria in.
 const ORDER = ['2', '4', '6', '7', '8', '9'];
 
-// A minimal RFC 4180 reader, so the assertions are about what a spreadsheet
-// would load rather than about the string we happened to emit.
+// Minimal RFC 4180 reader: assert what a spreadsheet would load.
 function parseCsv(text) {
   const rows = [];
   let row = [];
@@ -90,15 +83,13 @@ test('a row says which table it came from', () => {
 });
 
 test('a group with no disposition reads "counted", not blank', () => {
-  // Blank would make the reader guess whether it counts toward the score.
   const rows = flattenFindings(sample(), ORDER);
   const complexity = rows.find((r) => r.sub_metric === 'Cyclomatic complexity');
   assert.strictEqual(complexity.sub_metric_disposition, 'counted');
 });
 
 test('an allowed finding keeps its disposition so it can be filtered out', () => {
-  // It is on the report and NOT in the score. A spreadsheet that cannot tell
-  // the two apart overstates the outstanding work on every export.
+  // On the report, not in the score.
   const rows = flattenFindings(sample(), ORDER);
   const allowed = rows.filter((r) => r.sub_metric_disposition === 'allowed');
   assert.strictEqual(allowed.length, 1);
@@ -106,19 +97,14 @@ test('an allowed finding keeps its disposition so it can be filtered out', () =>
 });
 
 test('LEAD_COLUMNS must not collide with any item field', () => {
-  // A collision puts one name in the header twice, and the group's value wins
-  // — silently deleting the item's. Both `sub` (deployment capabilities) and
-  // `disposition` (SAST) are real item fields, and a first draft of this used
-  // exactly those two as lead columns. The fixture did not catch it; the real
-  // data did.
+  // A collision puts one name in the header twice and the item's value is lost.
+  // `sub` and `disposition` are both real item fields.
   for (const lead of LEAD_COLUMNS) {
     assert.ok(!FIELD_ORDER.includes(lead), `${lead} is both a lead column and an item field`);
   }
 });
 
 test('an item field sharing a lead column name would be caught, not overwritten', () => {
-  // The planted violation for the test above: if the guard ever stops holding,
-  // this is what it looks like from the reader's side.
   const data = {
     criteria: {
       7: {
@@ -154,8 +140,6 @@ test('an empty array is absent rather than a column of nothing', () => {
 });
 
 test('a field nobody listed is appended rather than dropped', () => {
-  // A scanner that starts emitting something new should appear in the export
-  // on the day it does, not when someone remembers to widen FIELD_ORDER.
   const cols = itemColumns([{ file: 'a.ex', brand_new_field: 'x' }]);
   assert.deepStrictEqual(cols, ['file', 'brand_new_field']);
 });
@@ -188,9 +172,6 @@ test('commas, quotes and newlines survive a round trip', () => {
 });
 
 test('a value that a spreadsheet would run as a formula is neutralised', () => {
-  // Findings data carries paths and rule ids out of repositories we do not
-  // control — the same semi-trusted input the report page HTML-escapes. Excel,
-  // Sheets and LibreOffice all execute a cell beginning = + - @.
   for (const bad of ['=1+1', '+1', '-1', '@SUM(A1)', '\tx', '\rx']) {
     assert.ok(neutralise(bad).startsWith("'"), `${JSON.stringify(bad)} must be neutralised`);
   }
@@ -209,7 +190,6 @@ test('a value that a spreadsheet would run as a formula is neutralised', () => {
 });
 
 test('the guard fires on the first character only', () => {
-  // Over-broad neutralising would put an apostrophe in front of most paths.
   assert.strictEqual(neutralise('lib/a=b.ex'), 'lib/a=b.ex');
   assert.strictEqual(neutralise('CVE-2024-1'), 'CVE-2024-1');
   assert.strictEqual(neutralise(''), '');
@@ -234,16 +214,12 @@ test('criteria the data does not have are skipped, not emitted empty', () => {
 });
 
 test('no findings produces a header and nothing else, rather than throwing', () => {
-  // The button is hidden in this case, but a report can arrive with criteria
-  // whose groups are all empty and that must not be a crash.
   const csv = toCsv({ criteria: {} }, ORDER);
   assert.strictEqual(parseCsv(csv).length, 1);
   assert.deepStrictEqual(parseCsv(csv)[0], LEAD_COLUMNS);
 });
 
 test('the file is named for the scan, not for today', () => {
-  // Two exports of one scan should be the same file, not two files that look
-  // like two scans.
   assert.strictEqual(fileName('billing', '2026-09-08T04:17:00Z', 'csv'), 'findings-billing-2026-09-08.csv');
   assert.strictEqual(fileName('billing', '', 'csv'), 'findings-billing.csv');
 });

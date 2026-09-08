@@ -106,17 +106,8 @@
     justify-content: space-between;
     margin-bottom: 36px;
     gap: 16px;
-    /* WITHOUT THESE TWO LINES ANY MENU IN THE HEADER IS HALF UNCLICKABLE, and
-       the reason is not obvious from anything nearby.
-       `.header` carries the `rise` entry animation, which animates `transform`.
-       An animation with `fill-mode: both` leaves the computed transform as a
-       matrix rather than `none` once it has finished — so the header is a
-       stacking context permanently, and a `z-index` on anything inside it is
-       scoped to that context and cannot escape. The header's own level was
-       `auto`, so every `.section` below it in the document painted on top,
-       including over the part of an open dropdown that overhangs the first one.
-       It looked completely normal: the menu was drawn, and the lower half of it
-       silently belonged to the panel underneath. */
+    /* Required: the `rise` animation makes this a permanent stacking context,
+       so a dropdown inside it renders under .section without a level here. */
     position: relative;
     z-index: 2;
   }
@@ -150,9 +141,7 @@
     margin-top: 4px;
     box-shadow: var(--shadow-sm);
   }
-  /* The right-hand column of a header: the score badge, and under it whatever
-     actions the page has. The badge used to be the header's last child, so a
-     link appended beside it landed after it on the same row. */
+  /* Score badge, with the page's actions under it. */
   .header-side {
     display: flex;
     flex-direction: column;
@@ -160,9 +149,7 @@
     gap: 10px;
   }
   .report-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-  /* An <a> and a <button> sit side by side here and must be indistinguishable,
-     so everything a button brings of its own — font, background, border — is
-     stated rather than inherited. */
+  /* Used on both <a> and <button>, so nothing is left to inherit. */
   .btn {
     display: inline-flex;
     align-items: center;
@@ -181,14 +168,11 @@
     cursor: pointer;
     transition: background 0.15s var(--ease), border-color 0.15s var(--ease), color 0.15s var(--ease);
   }
-  /* The same accent tint .chip-draft uses. There is no --surface-3 to step up
-     to, so the hover has to come from the accent rather than from the greys. */
+  /* Accent tint, as .chip-draft: there is no --surface-3 to step up to. */
   .btn:hover { background: rgba(88, 166, 255, 0.12); border-color: var(--accent); color: var(--accent); }
   .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  /* A button with a short list of formats under it. `position: relative` on the
-     wrapper is what keeps the list attached to its own button rather than to
-     the page — the header is a flex row and the controls move within it. */
+  /* Wrapper must stay positioned: the list is anchored to it, not the page. */
   .menu { position: relative; display: inline-flex; }
   .menu-caret { margin-left: 2px; font-size: 0.9em; opacity: 0.75; }
   .menu-list {
@@ -206,9 +190,7 @@
     padding: 4px;
     gap: 2px;
   }
-  /* `hidden` is a presentation hint that the `display: flex` above overrides,
-     so without this the list stays on screen while telling assistive technology
-     it is gone. */
+  /* Required: `display: flex` above would otherwise override `hidden`. */
   .menu-list[hidden] { display: none; }
   .menu-item {
     font-family: inherit;
@@ -870,19 +852,10 @@
   .load-strip.is-active { opacity: 1; background: var(--accent); background-size: 100% 100%; }
 }
 
-/* ── Print ──────────────────────────────────────────────────────────────────
-   "Download report → PDF" is the browser's own Save as PDF, pointed at the
-   findings report. That makes the PDF the report itself — real tables, real
-   type — rather than a reconstruction of it, and it costs no dependency.
-
-   THE REASON THIS SECTION HAS TO EXIST. The site is dark: near-black surfaces
-   and near-white text. Browsers do not print background colours by default, so
-   without any of this the surfaces drop out and the PDF is white paper with
-   white text on it. Every colour is therefore restated for paper rather than
-   inherited, by overriding the variables at the root so that the inline styles
-   in the report's own markup follow along without being touched.
-
-   Everything here is print-only. Nothing in this block can affect the screen. */
+/* ── Print ──
+   Colours are restated for paper: the screen theme is dark and browsers do not
+   print backgrounds, so inherited styles give white text on white. Overriding
+   the variables at the root carries the report's inline styles with it. */
 @media print {
   :root {
     --bg: #ffffff;
@@ -897,7 +870,6 @@
     --shadow-md: none;
   }
 
-  /* The page's own margins are the printer's job. */
   @page { margin: 14mm; }
 
   body {
@@ -906,20 +878,17 @@
     color: #000000;
     padding: 0;
   }
-  /* The grain overlay is a fixed full-page element; on paper it would print on
-     every sheet. */
+  /* Fixed full-page overlay — would print on every sheet. */
   body::before { display: none !important; }
 
   .page { max-width: none; }
 
-  /* Controls, and the way back. A printed page has no navigation. */
   .back-link,
   .btn,
   .menu,
   .load-strip { display: none !important; }
 
-  /* Panels scroll horizontally on screen, which on paper clips whatever is off
-     the right edge instead of wrapping it. */
+  /* Horizontal scroll clips on paper instead of wrapping. */
   .panel {
     overflow: visible !important;
     border: 1px solid #999999;
@@ -927,20 +896,15 @@
   }
 
   table { border-collapse: collapse; width: 100%; }
-  /* Repeat the column names at the top of every sheet — a findings table runs
-     to hundreds of rows, and page four of a table with no header is unreadable. */
+  /* Repeat column names on every sheet; these tables run to hundreds of rows. */
   thead { display: table-header-group; }
   tr { break-inside: avoid; }
   td, th { border-bottom: 1px solid #dddddd; }
-
-  /* A heading alone at the foot of a page belongs to the next one. */
   .section-label { break-after: avoid; }
 
-  /* Underlining every link is noise once none of them can be followed. */
   a { color: #000000; text-decoration: none; }
 
-  /* Open every disclosure. On screen these are collapsed by choice; on paper a
-     collapsed one is simply missing content with no way to ask for it. */
+  /* A collapsed disclosure on paper is missing content with no way to open it. */
   details > summary { display: none; }
   details > *:not(summary) { display: block !important; }
 }

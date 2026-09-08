@@ -1,37 +1,16 @@
 'use strict';
 
-// The findings report as a PDF.
+// The findings report as a PDF, built with jsPDF and its table plugin.
 //
-// WHY THIS EXISTS RATHER THAN THE BROWSER'S OWN SAVE AS PDF, which was tried
-// first and is much cheaper: the print dialog opened and its Save did nothing,
-// both from the tab this opens and from pressing the print shortcut on the
-// report page directly with no script involved at all. The document was fine —
-// rendering the same page headlessly produced a valid PDF — so it was the
-// interactive print path, which is not something this code can reach or repair.
-// The print stylesheet stays, because it is what makes that path good for
-// anyone whose browser does work; this is the route that does not depend on it.
-//
-// The cost is real and worth stating: about 440 kB of jsPDF and its table
-// plugin. They are LOADED ON DEMAND, when someone chooses PDF, so no page pays
-// for them otherwise — a system page already fetches a findings file that can
-// reach 1.2 MB and does not need help being heavy.
-//
-// The document follows the report rather than dumping a grid: a heading per
-// criterion, a sub-heading per group carrying its count and its disposition,
-// and one table per group with that group's own columns — the same columns, in
-// the same order, that the page and the CSV use.
-//
-// Everything below is inside a function on purpose. Classic <script> tags share
-// one global lexical scope, so a top-level binding here collides with whichever
-// page script picks the same word and the browser silently refuses to parse the
-// second file. See tests/shared-scripts.test.js.
+// The libraries are ~440 kB and are loaded on demand, so no page load pays for
+// them. The browser's own Save as PDF was tried first and does nothing on Save,
+// including from the print shortcut with no script involved.
+
+// Wrapped: classic <script> tags share one global lexical scope.
 (function attachFindingsPdf() {
 
-// Resolved on first use rather than at load. A top-level read means this file
-// only defines its namespace if a sibling tag came first, so a mis-ordered
-// <script> would leave the page script holding `undefined` with nothing said
-// about why. This way the file always registers, and a genuinely missing
-// sibling fails loudly at the moment somebody asks for a download.
+// Resolved on first use, so a mis-ordered <script> tag fails loudly here
+// rather than leaving this file's namespace undefined.
 let COLUMNS_CACHE = null;
 function columns() {
   if (COLUMNS_CACHE) return COLUMNS_CACHE;
@@ -42,13 +21,10 @@ function columns() {
   return COLUMNS_CACHE;
 }
 
-// Served by server.js out of node_modules, so the versions are the ones in the
-// lockfile rather than copies of a bundle nobody updates.
+// Served by server.js out of node_modules, so the version is the lockfile's.
 const SCRIPTS = ['/vendor/jspdf.umd.min.js', '/vendor/jspdf.plugin.autotable.min.js'];
 
-// Landscape, because a findings table is wide: a duplication row is two repo
-// paths side by side, and a code-scanning row is a path, a line and a rule id.
-// Portrait wraps all of them into three lines each.
+// Landscape: a duplication row is two repo paths side by side.
 const PAGE = { orientation: 'landscape', unit: 'pt', format: 'a4' };
 
 const INK = {
@@ -58,16 +34,14 @@ const INK = {
   headFill: [243, 244, 246],
 };
 
-// "counted" is the ordinary state and saying so on every group is noise. The
-// ones worth naming are the ones that change what a number means.
+// "counted" is the ordinary state and not worth printing.
 function dispositionNote(disposition) {
   if (!disposition || disposition === 'counted') return '';
   if (disposition === 'allowed') return ' — allowed, not counted toward the score';
   return ` — ${disposition}`;
 }
 
-// Every group the report would draw, in the order it draws them, flattened to
-// one list so the builder is a loop rather than three nested ones.
+// Every group the report would draw, flattened to one list.
 function reportGroups(data, criteriaOrder) {
   const criteria = (data && data.criteria) || {};
   const keys = (criteriaOrder && criteriaOrder.length)
@@ -92,9 +66,7 @@ function reportGroups(data, criteriaOrder) {
   return out;
 }
 
-// Build the document. `jsPDFCtor` and `autoTable` are passed in rather than
-// read off a global, which is what lets the tests build a real PDF in Node and
-// assert its shape instead of trusting a screenshot of one.
+// The library and plugin are passed in, so tests can build a real PDF in Node.
 function buildDoc(jsPDFCtor, autoTable, data, criteriaOrder, meta) {
   const doc = new jsPDFCtor(PAGE);
   const width = doc.internal.pageSize.getWidth();
@@ -125,8 +97,7 @@ function buildDoc(jsPDFCtor, autoTable, data, criteriaOrder, meta) {
 
   for (const g of groups) {
     if (g.criterion !== lastCriterion) {
-      // A criterion heading with nothing under it is a heading stranded at the
-      // foot of a page, so it moves to the next one with its first table.
+      // Keep a heading with its first table rather than at a page foot.
       if (cursor > doc.internal.pageSize.getHeight() - 120) {
         doc.addPage();
         cursor = 56;
@@ -156,8 +127,7 @@ function buildDoc(jsPDFCtor, autoTable, data, criteriaOrder, meta) {
       headStyles: {
         font: 'helvetica', fontStyle: 'bold', fontSize: 7, textColor: INK.muted, fillColor: INK.headFill,
       },
-      // A table running to hundreds of rows crosses pages, and page four with
-      // no column names on it is unreadable.
+      // These tables cross pages; every sheet needs the column names.
       showHead: 'everyPage',
       theme: 'grid',
       tableWidth: width - margin * 2,
@@ -166,8 +136,7 @@ function buildDoc(jsPDFCtor, autoTable, data, criteriaOrder, meta) {
     cursor = doc.lastAutoTable.finalY + 22;
   }
 
-  // Page numbers last, because the count is not known until every table has
-  // been laid out.
+  // Last: the page count is not known until every table is laid out.
   const pages = doc.getNumberOfPages();
   for (let i = 1; i <= pages; i += 1) {
     doc.setPage(i);
@@ -181,8 +150,7 @@ function buildDoc(jsPDFCtor, autoTable, data, criteriaOrder, meta) {
   return doc;
 }
 
-// Load a script once. The promise is cached rather than the boolean, so two
-// fast clicks wait on one load instead of starting two.
+// The promise is cached, so two fast clicks wait on one load.
 const loading = new Map();
 
 function loadScript(doc, src) {
@@ -193,8 +161,7 @@ function loadScript(doc, src) {
     el.async = false;
     el.onload = () => resolve();
     el.onerror = () => {
-      // Not cached as a failure: a reader who lost the network for a moment
-      // should be able to press the button again.
+      // Not cached as a failure, so the button can be pressed again.
       loading.delete(src);
       reject(new Error(`could not load ${src}`));
     };
@@ -204,7 +171,7 @@ function loadScript(doc, src) {
   return p;
 }
 
-// In order — the table plugin attaches itself to jsPDF and cannot load first.
+// In order: the plugin attaches itself to jsPDF.
 async function loadLibraries(win, doc) {
   for (const src of SCRIPTS) await loadScript(doc, src);
   const ctor = win.jspdf && win.jspdf.jsPDF;

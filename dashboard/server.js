@@ -14,21 +14,12 @@ const { criteriaIds, criteriaSlugs } = require('./db/criteria');
 
 const PUBLIC = path.join(__dirname, 'public');
 
-// The PDF export's two libraries, served straight out of node_modules rather
-// than committed into public/ as minified blobs. That keeps the versions in the
-// lockfile where `npm audit` can see them — this tool scores other people's
-// dependency hygiene and has no business carrying a vendored copy nobody
-// updates. The page loads them on demand, so nothing pays for the ~440 kB
-// unless somebody asks for a PDF.
+// The PDF export's libraries, served from node_modules rather than vendored
+// into public/, so the versions stay in the lockfile for `npm audit`. Named one
+// file each: exposing a directory would publish whatever else they ship.
 //
-// Named one file each. Exposing a directory would publish whatever else those
-// packages happen to ship.
-// Resolved through each package's own entry point and then across to the
-// browser build beside it. Asking for the file by subpath does not work:
-// `exports` in both manifests declares which paths are importable, and the UMD
-// bundles are not among them — a deliberate restriction on their part, not a
-// gap to route around with a hand-written node_modules path that breaks the
-// first time a package is hoisted differently.
+// Resolved via each package's entry point — neither manifest exports the UMD
+// bundle by subpath, and a hand-written node_modules path breaks under hoisting.
 const vendorFile = (pkg, file) => path.join(path.dirname(require.resolve(pkg)), file);
 
 const VENDOR_SCRIPTS = {

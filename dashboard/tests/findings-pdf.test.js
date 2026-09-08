@@ -1,10 +1,4 @@
-// tests/findings-pdf.test.js
-//
-// The PDF builder takes the jsPDF constructor and the table plugin as
-// arguments rather than reading them off `window`, which means these tests
-// build REAL PDFs with the real libraries and assert what came out — page
-// counts, text on the page, and that no finding was dropped. A screenshot of
-// one page would not have told us any of that.
+// These build real PDFs with the real libraries and assert what came out.
 
 const { test } = require('node:test');
 const assert = require('node:assert');
@@ -82,9 +76,9 @@ test('a group with no items is left out rather than drawn empty', () => {
   assert.deepStrictEqual(groups, []);
 });
 
+// The reason the PDF is worth having over the CSV, which has to flatten every
+// group into one set of columns.
 test('each group carries its own columns, not a shared union', () => {
-  // This is the whole reason the PDF is worth having over the CSV: the CSV has
-  // to flatten every group into one set of columns and most cells go blank.
   const groups = reportGroups(sample(), ORDER);
   const byLabel = Object.fromEntries(groups.map((g) => [g.label + g.disposition, g.columns]));
   assert.deepStrictEqual(byLabel['Duplicationcounted'], ['fileA', 'fileB', 'lines']);
@@ -106,8 +100,6 @@ test('the document names the system and the scan date', () => {
 });
 
 test('no finding is lost between the report and the PDF', () => {
-  // The count that matters. A layout change that silently drops a table would
-  // otherwise look like a slightly shorter document.
   const data = sample();
   const expected = reportGroups(data, ORDER).reduce((n, g) => n + g.items.length, 0);
   const text = textOf(build(data)).join('\n');
@@ -131,8 +123,6 @@ test('a long table runs onto more pages rather than off the bottom of one', () =
 });
 
 test('a table that crosses a page keeps its column names', () => {
-  // Page four of a table with no header is unreadable, and this is the setting
-  // that is easiest to lose in a refactor.
   const many = Array.from({ length: 400 }, (_, i) => ({ file: `lib/file_${i}.ex`, rule: 'some-rule' }));
   const pages = textOf(build({
     system: 'billing',
@@ -167,8 +157,7 @@ test('the file is named for the scan and ends in .pdf', () => {
 });
 
 test('the libraries are loaded from paths the server actually serves', () => {
-  // A typo here is a 404 at the moment a reader clicks, and nothing else would
-  // catch it: these are fetched on demand, so no page load exercises them.
+  // Fetched on demand, so no page load would catch a typo.
   const server = require('fs').readFileSync(require('path').join(__dirname, '..', 'server.js'), 'utf8');
   for (const src of SCRIPTS) {
     assert.ok(server.includes(`'${src}'`), `server.js does not serve ${src}`);

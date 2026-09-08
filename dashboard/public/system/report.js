@@ -12,12 +12,7 @@ const REPORT_CRITERIA = [
   { key: '9', label: 'Security Posture' },
 ];
 
-// Ordered, human-friendly columns for whichever fields an item carries.
-//
-// This page, the CSV export and the PDF export order the same fields, and the
-// list was written out twice before the third one arrived. Copies of one
-// ordering are how a table and its downloads start disagreeing about where a
-// column goes, so there is one, in findings-columns.js.
+// Column ordering, shared with the CSV and PDF exports.
 const { itemColumns } = (typeof require === 'function'
   ? require('../js/findings-columns.js')
   : window.FindingsColumns);

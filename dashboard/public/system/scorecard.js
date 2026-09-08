@@ -11,9 +11,7 @@
 const CRITERIA = (typeof require === 'function'
   ? require('../js/criteria.js')
   : window.Criteria).CRITERIA;
-// The two export builders. They live in their own files because each is worth
-// testing on its own, and because the report page orders the same fields from
-// the same list they both read.
+// The export builders, and the column ordering all three surfaces share.
 const FINDINGS_CSV = (typeof require === 'function'
   ? require('../js/findings-csv.js')
   : window.FindingsCsv);
@@ -171,19 +169,9 @@ function dot(colour) {
   return `<span class="dot" style="width:12px;height:12px;background:${COLOURS[colour]}"></span>`;
 }
 
-// A button that opens a short list of formats.
-//
-// `items` is `[{ label, onSelect }]`, so what the menu offers is data and this
-// function is only the behaviour: open, close on Escape, close on a click
-// anywhere else, close after choosing. Built rather than templated because the
-// page has no build step and this is the only menu on the site.
-//
-// The parts that are not decoration: `aria-haspopup` and `aria-expanded` so a
-// screen reader is told this is a menu and whether it is open; a real <button>
-// per item so each is reachable by keyboard without inventing key handling; and
-// the outside-click listener registered on open and removed on close, because
-// one left on the document per page load is a leak that only shows up on a
-// page nobody reloads.
+// A button that opens a short list of formats. `items` is
+// `[{ label, onSelect }]`; this supplies only the behaviour — open, close on
+// Escape, on an outside click, and after choosing.
 function buildMenu(label, items) {
   const wrap = document.createElement('div');
   wrap.className = 'menu';
@@ -221,8 +209,7 @@ function buildMenu(label, items) {
   function onKeydown(e) {
     if (e.key !== 'Escape') return;
     close();
-    // Focus goes back to the thing that opened the menu, or the reader is left
-    // nowhere after dismissing it.
+    // Or the reader is left nowhere after dismissing it.
     trigger.focus();
   }
 
@@ -243,8 +230,7 @@ function buildMenu(label, items) {
     button.setAttribute('role', 'menuitem');
     button.textContent = item.label;
     button.addEventListener('click', () => {
-      // Closed first. A format that opens a print dialog or takes a second to
-      // build would otherwise leave the menu hanging open behind it.
+      // Closed first: building a PDF takes a moment.
       close();
       item.onSelect();
     });
@@ -320,12 +306,8 @@ async function initScorecard(systemKey) {
     badge.textContent = 'Not yet scored';
   }
 
-  // Two controls, or neither. A system with no findings file has nothing to open
-  // and nothing to download, and a button that hands back an empty file is worse
-  // than an absent one. This is the same condition the single link used before.
-  //
-  // Neither needs a fetch or a route: the page already loaded the whole findings
-  // file above, which is the same file the report page draws from.
+  // Both or neither: a system with no findings has nothing to download. Neither
+  // needs a fetch — the page loaded the findings file above.
   const actions = document.getElementById('report-actions');
   if (actions && findings && findings.criteria) {
     const view = document.createElement('a');
@@ -333,15 +315,13 @@ async function initScorecard(systemKey) {
     view.href = `/system/${encodeURIComponent(systemKey)}/report`;
     view.textContent = 'View report';
 
-    // Criterion order comes from the namespace the page is already rendering,
-    // so neither download can disagree with the table above it.
+    // From the namespace the page is rendering, so a download cannot disagree
+    // with the table above it.
     const order = CRITERIA.map((c) => c.key);
     const meta = { system: systemKey, generatedAt: findings.generated_at };
 
-    // A format that fails should say so where the reader is looking. The PDF
-    // fetches two libraries the first time it is used, and a dead network there
-    // is the likeliest failure on this page — silently doing nothing would read
-    // exactly like the broken print dialog this replaced.
+    // The PDF fetches its libraries on first use, so a dead network is the
+    // likeliest failure here and must not look like nothing happening.
     const failed = (label, err) => {
       console.error(`${label} export failed:`, err);
       const banner = document.getElementById('page-banner');
@@ -365,16 +345,8 @@ async function initScorecard(systemKey) {
         },
       },
       {
-        // A real file rather than the browser's print dialog. Save as PDF was
-        // built first and was the cheaper answer by far — no dependency, and
-        // the PDF would have been the report itself — but its Save did nothing,
-        // both from a tab opened here and from the print shortcut pressed on
-        // the report page with no script involved. The document was fine;
-        // rendering the same page headlessly produced a valid PDF. That leaves
-        // the interactive print path, which this code cannot reach or repair.
-        //
-        // The print stylesheet stays: it is what makes that path good for
-        // anyone whose browser does print.
+        // Built here rather than via the browser's Save as PDF, whose Save
+        // does nothing. The print stylesheet stays for the print shortcut.
         label: 'PDF',
         onSelect: () => FINDINGS_PDF
           .download(window, document, findings, order, meta)
