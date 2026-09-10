@@ -71,6 +71,8 @@ function rowsToFindings({ findings }, systemKey, { generatedAt }) {
   return { system: systemKey, generated_at: generatedAt, criteria };
 }
 
+const WEEK_MS = 7 * 86400000;
+
 // How far a system has moved across the readings in the window.
 //
 // This is arithmetic over two published facts, not a score — no scan produces a
@@ -84,30 +86,18 @@ function rowsToFindings({ findings }, systemKey, { generatedAt }) {
 // once. Same reasoning as an unscored criterion reading as absent rather than
 // as zero.
 //
-// The baseline is the newest reading at least a week older than the latest, so
-// the card answers "what has changed lately" rather than "since records began".
-// It used to compare against the oldest reading in the whole window, which on a
-// board whose history starts in August meant every card reported a span of
-// weeks and grew by one day per day.
-//
-// `days` is reported because the baseline is rarely exactly seven days old and
-// the caller has to be able to tell the truth about which it got. A system
-// scanned weekly lands close to seven; a system scanned when somebody remembers
-// lands nowhere near it, and a card claiming "this week" over a three-week gap
-// is a worse answer than the one this replaces.
-const WEEK_MS = 7 * 86400000;
-
-// `from` is a real reading, never the window's start — a system onboarded on
-// 11 August has no 3 August reading, and saying "since 3 August" would be false.
+// Baseline: the newest reading at least a week older than the latest. `days`
+// is reported because it is rarely exactly seven, and the caller has to be able
+// to say which it got rather than claim a week over a three-week gap. `from` is
+// always a real reading, never the window's start.
 function movementOf(points) {
   const scored = points.filter((p) => typeof p.score === 'number');
   if (scored.length < 2) return null;
   const last = scored[scored.length - 1];
   const cutoff = Date.parse(last.date) - WEEK_MS;
 
-  // Newest reading at or before the cutoff. Falling back to the oldest covers
-  // the system scanned twice in three days: everything it has is inside the
-  // week, so the honest baseline is the earliest of them and the span is short.
+  // Falling back to the oldest covers a system whose readings are all inside
+  // the week.
   const older = scored.filter((p) => Date.parse(p.date) <= cutoff);
   const first = older.length ? older[older.length - 1] : scored[0];
   if (first === last) return null;

@@ -34,10 +34,7 @@ test('readings are grouped per system and left in the order the query returned',
 });
 
 test('movement compares the latest against a week back, and survives floating point', () => {
-  // 21 Aug is the latest; a week back is 14 Aug; the newest reading at or before
-  // that is 11 Aug. The 3 Aug reading is not the baseline any more — comparing
-  // against the start of recorded history is what made every card report a span
-  // that grew by one day per day.
+  // Latest 21 Aug, a week back is 14 Aug, so the baseline is 11 Aug — not 3 Aug.
   const out = rowsToHistory([
     row('alpha', '2026-08-03', 3.4),
     row('alpha', '2026-08-11', 5.0),
@@ -137,10 +134,8 @@ test('the fleet reader is one statement, not one per system', async () => {
 });
 
 test('a baseline far older than a week is still reported, with its real span', () => {
-  // The dispatch-only case: scanned 19 August, then not again until 8 September.
-  // There is no reading a week back, so the comparison is against what exists
-  // and `days` says how far back that was. The card names the date rather than
-  // calling three weeks "this week".
+  // No reading a week back, so `days` carries the real span and the card names
+  // the date instead of claiming a week.
   const out = rowsToHistory([
     row('alpha', '2026-08-19', 40),
     row('alpha', '2026-09-08', 44),
@@ -153,9 +148,7 @@ test('a baseline far older than a week is still reported, with its real span', (
 });
 
 test('when every reading is inside the week, the oldest of them is the baseline', () => {
-  // Scanned twice in three days. Nothing is a week old, so there is no week to
-  // report — but there are two readings, and saying nothing about a system that
-  // has visibly moved would be worse. The short span is carried on `days`.
+  // Nothing is a week old, but two readings still compare.
   const out = rowsToHistory([
     row('alpha', '2026-09-08', 40),
     row('alpha', '2026-09-10', 44),
@@ -167,9 +160,7 @@ test('when every reading is inside the week, the oldest of them is the baseline'
 });
 
 test('the baseline is the newest reading a week back, not the oldest one', () => {
-  // Four weekly readings. Comparing against the oldest is the behaviour this
-  // replaced, and it would report a month of movement on a card headed "this
-  // week".
+  // Against the oldest this would report a month of movement as a week.
   const out = rowsToHistory([
     row('alpha', '2026-08-10', 10),
     row('alpha', '2026-08-17', 20),
@@ -184,8 +175,7 @@ test('the baseline is the newest reading a week back, not the oldest one', () =>
 });
 
 test('two readings on the same day are a position, not a movement', () => {
-  // Both are inside the week and the fallback would otherwise compare a reading
-  // with itself, reporting a confident 0% over zero days.
+  // The fallback must not compare a reading with itself.
   const out = rowsToHistory([
     row('alpha', '2026-09-10', 44),
     row('alpha', '2026-09-10', 44),
