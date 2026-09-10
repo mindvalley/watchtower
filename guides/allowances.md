@@ -2,7 +2,9 @@
 
 Some findings are not problems — the code is development-only or the finding is a false positive.
 
-An allowance does not affect scoring, but the finding is still included in the report with its reason.
+An allowance removes the finding from the score and keeps it in the report, marked with its reason. Nothing disappears: a report says "3 findings, 1 allowed" rather than "2 findings".
+
+Each entry therefore changes a published number, so each one is worth its own review.
 
 **Matched on a specific line:**
 
