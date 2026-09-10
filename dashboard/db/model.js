@@ -71,6 +71,8 @@ function rowsToFindings({ findings }, systemKey, { generatedAt }) {
   return { system: systemKey, generated_at: generatedAt, criteria };
 }
 
+const WEEK_MS = 7 * 86400000;
+
 // How far a system has moved across the readings in the window.
 //
 // This is arithmetic over two published facts, not a score — no scan produces a
@@ -84,14 +86,22 @@ function rowsToFindings({ findings }, systemKey, { generatedAt }) {
 // once. Same reasoning as an unscored criterion reading as absent rather than
 // as zero.
 //
-// `from` is the date of the system's earliest reading IN THE WINDOW, which is
-// not necessarily the window's start — a system onboarded on 11 August has no
-// 3 August reading, and saying "since 3 August" about it would be false.
+// Baseline: the newest reading at least a week older than the latest. `days`
+// is reported because it is rarely exactly seven, and the caller has to be able
+// to say which it got rather than claim a week over a three-week gap. `from` is
+// always a real reading, never the window's start.
 function movementOf(points) {
   const scored = points.filter((p) => typeof p.score === 'number');
   if (scored.length < 2) return null;
-  const first = scored[0];
   const last = scored[scored.length - 1];
+  const cutoff = Date.parse(last.date) - WEEK_MS;
+
+  // Falling back to the oldest covers a system whose readings are all inside
+  // the week.
+  const older = scored.filter((p) => Date.parse(p.date) <= cutoff);
+  const first = older.length ? older[older.length - 1] : scored[0];
+  if (first === last) return null;
+
   return {
     from: first.date,
     to: last.date,
@@ -101,6 +111,7 @@ function movementOf(points) {
     // 0.19999999999999996, and a board that prints that has lost the reader.
     // One decimal place is the precision scores are published and displayed at.
     delta: Math.round((last.score - first.score) * 10) / 10,
+    days: Math.round((Date.parse(last.date) - Date.parse(first.date)) / 86400000),
     readings: scored.length,
   };
 }
