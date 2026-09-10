@@ -284,8 +284,13 @@ test('the fleet reader returns every system in one statement, oldest first', { s
     assert.deepStrictEqual(Object.keys(out.systems).sort(), ['alpha', 'beta']);
     assert.deepStrictEqual(out.systems.alpha.points.map((p) => p.date),
       ['2026-08-03', '2026-08-11', '2026-08-21'], 'oldest first, and July excluded by the window');
-    assert.strictEqual(out.systems.alpha.movement.delta, 0.2);
+    // 0.1, not 0.2: the baseline is the newest reading a week before the latest,
+    // so alpha compares 21 Aug against 11 Aug and not against 3 Aug. Beta has
+    // nothing inside that week, so it falls back to 3 Aug and spans 18 days.
+    assert.strictEqual(out.systems.alpha.movement.delta, 0.1);
+    assert.strictEqual(out.systems.alpha.movement.from, '2026-08-11');
     assert.strictEqual(out.systems.beta.movement.delta, -0.2, 'a decline reads as a decline');
+    assert.strictEqual(out.systems.beta.movement.days, 18);
     assert.strictEqual(typeof out.systems.alpha.movement.to_score, 'number',
       'a score arriving as a string would make every delta NaN');
 

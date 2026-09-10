@@ -387,22 +387,31 @@ function ring(score, colour) {
       </svg>`;
 }
 
-function daysBetween(fromIso, toIso) {
-  return Math.round((Date.parse(toIso) - Date.parse(fromIso)) / 86400000);
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function shortDate(iso) {
+  const d = new Date(iso);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 }
 
-// Movement as a percentage of where the system started, over the days it took.
-// A percentage rather than the raw difference because the composite is now out
-// of 100 and "+2" reads as trivial at 66 and as substantial at 16.
+// A baseline within a couple of days either side of a week reads as "this week".
+// Beyond that it does not, and the card names the date it actually compared
+// against — a system scanned when somebody remembers has gaps of weeks, and
+// calling three weeks "this week" is a worse answer than the span it replaced.
+function windowLabel(days, fromIso) {
+  return days >= 5 && days <= 13 ? 'this week' : `since ${shortDate(fromIso)}`;
+}
+
+// Movement as a percentage of where the system was, not as raw points: the
+// composite is out of 100, so "+2" reads as trivial at 66 and substantial at 16.
 function deltaLine(entry) {
   const m = entry && entry.movement;
   // One reading is a position, not a movement. "0%" would tell the reader the
   // system held steady when we have measured it exactly once.
   if (!m) return '<span class="wt-delta">one reading</span>';
 
-  const days = daysBetween(m.from, m.to);
-  const window = `${days} day${days === 1 ? '' : 's'}`;
-  if (m.to_score === m.from_score) return `<span class="wt-delta">No change · ${window}</span>`;
+  const window = windowLabel(m.days, m.from);
+  if (m.to_score === m.from_score) return `<span class="wt-delta">No change ${window}</span>`;
 
   // A system that started at zero has no percentage to move by; say the points.
   const pct = m.from_score === 0
@@ -414,7 +423,7 @@ function deltaLine(entry) {
     : `${Math.abs(pct).toFixed(1)}%`;
 
   return `<span class="wt-delta"><span class="${up ? 'wt-up' : 'wt-down'}">`
-    + `${up ? '▲' : '▼'} ${magnitude}</span> · ${window}</span>`;
+    + `${up ? '▲' : '▼'} ${magnitude}</span> ${window}</span>`;
 }
 
 function actionBlock(s) {
