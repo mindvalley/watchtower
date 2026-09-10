@@ -33,16 +33,19 @@ test('readings are grouped per system and left in the order the query returned',
   assert.strictEqual(out.since, '2026-08-03', 'the window is echoed back so the page need not hardcode it');
 });
 
-test('movement reads first to last, and the delta survives floating point', () => {
+test('movement compares the latest against a week back, and survives floating point', () => {
+  // Latest 21 Aug, a week back is 14 Aug, so the baseline is 11 Aug — not 3 Aug.
   const out = rowsToHistory([
     row('alpha', '2026-08-03', 3.4),
     row('alpha', '2026-08-11', 5.0),
-    row('alpha', '2026-08-21', 3.6),
+    row('alpha', '2026-08-21', 5.2),
   ], { since: '2026-08-03' });
 
   const m = out.systems.alpha.movement;
-  assert.strictEqual(m.from_score, 3.4);
-  assert.strictEqual(m.to_score, 3.6, 'the last reading, not the highest');
+  assert.strictEqual(m.from, '2026-08-11', 'the baseline is a week back, not the oldest reading');
+  assert.strictEqual(m.from_score, 5.0);
+  assert.strictEqual(m.to_score, 5.2, 'the last reading, not the highest');
+  assert.strictEqual(m.days, 10);
   assert.strictEqual(m.readings, 3);
   // 3.6 - 3.4 is 0.19999999999999996 in binary floating point. A board that
   // prints that has lost the reader, so the delta is rounded to the precision
@@ -128,4 +131,56 @@ test('the fleet reader is one statement, not one per system', async () => {
   await fetchHistoryRows({ query: async (t) => { sql.push(t); return { rows: [] }; } });
 
   assert.strictEqual(sql.length, 1);
+});
+
+test('a baseline far older than a week is still reported, with its real span', () => {
+  // No reading a week back, so `days` carries the real span and the card names
+  // the date instead of claiming a week.
+  const out = rowsToHistory([
+    row('alpha', '2026-08-19', 40),
+    row('alpha', '2026-09-08', 44),
+  ], { since: '2026-08-03' });
+
+  const m = out.systems.alpha.movement;
+  assert.strictEqual(m.from, '2026-08-19');
+  assert.strictEqual(m.days, 20, 'the real span, not a claim of seven days');
+  assert.strictEqual(m.delta, 4);
+});
+
+test('when every reading is inside the week, the oldest of them is the baseline', () => {
+  // Nothing is a week old, but two readings still compare.
+  const out = rowsToHistory([
+    row('alpha', '2026-09-08', 40),
+    row('alpha', '2026-09-10', 44),
+  ], { since: '2026-08-03' });
+
+  const m = out.systems.alpha.movement;
+  assert.strictEqual(m.from, '2026-09-08');
+  assert.strictEqual(m.days, 2);
+});
+
+test('the baseline is the newest reading a week back, not the oldest one', () => {
+  // Against the oldest this would report a month of movement as a week.
+  const out = rowsToHistory([
+    row('alpha', '2026-08-10', 10),
+    row('alpha', '2026-08-17', 20),
+    row('alpha', '2026-08-24', 30),
+    row('alpha', '2026-08-31', 40),
+  ], { since: '2026-08-03' });
+
+  const m = out.systems.alpha.movement;
+  assert.strictEqual(m.from, '2026-08-24', 'one week back, not three');
+  assert.strictEqual(m.delta, 10);
+  assert.strictEqual(m.days, 7);
+});
+
+test('two readings on the same day are a position, not a movement', () => {
+  // The fallback must not compare a reading with itself.
+  const out = rowsToHistory([
+    row('alpha', '2026-09-10', 44),
+    row('alpha', '2026-09-10', 44),
+  ], { since: '2026-08-03' });
+
+  assert.ok(out.systems.alpha.movement, 'two distinct readings still compare');
+  assert.strictEqual(out.systems.alpha.movement.days, 0);
 });

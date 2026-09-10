@@ -87,7 +87,9 @@ test('the delta is a percentage over a window, not a raw difference', () => {
   const s = src();
   assert.match(s, /from_score\) \/ m\.from_score\) \* 100/,
     'the delta must be expressed relative to where the system started');
-  assert.match(s, /function daysBetween\s*\(/, 'the delta must say over what period');
+  assert.match(s, /function windowLabel\s*\(/, 'the delta must say over what period');
+  assert.match(s, /this week/, 'the ordinary case is a week');
+  assert.match(s, /since \$\{shortDate\(fromIso\)\}/, 'a baseline that is not a week old must name its date');
   // A single reading is a position, not a movement.
   assert.match(s, /one reading/);
 });
