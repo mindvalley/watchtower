@@ -57,6 +57,62 @@ Numbering is not contiguous: two criteria from the original spec were removed.
   clamping keeps capped systems ordered against each other, which is what says
   which of them is closest to being fixable.
 
+## Configuration
+
+Two ways to run it. Which one you are in decides what you install, what you
+need credentials for, and where the scores end up.
+
+### Local — everything on one machine
+
+You install the scanners, point a config at a folder or a repo, and run the
+seven scans. Scores land as JSON. Optionally run the board beside them and load
+the files in. Nothing publishes and nothing needs a credential. This is the
+default, and it is the right one for a single codebase or for trying it out.
+
+Step by step: [guides/local-setup.md](guides/local-setup.md).
+
+### Remote — scans run themselves
+
+The scanner runs in CI as the composite action, in each repository you want
+scored. It installs its own scanners at the pinned versions, so nothing is
+installed by hand. Scores are uploaded as build artifacts, and — if you declare
+`"publish": "ingest"` — posted to a dashboard somebody hosts.
+
+```
+  a repository you control
+  ┌──────────────────────────────┐
+  │ watchtower.config.json       │  which systems, and where each one lives
+  │ .github/workflows/scan.yaml  │  uses: mindvalley/watchtower@v1
+  └──────────────┬───────────────┘
+                 │  the action installs the pinned scanners, scans every
+                 │  system in the config, and assembles the scores
+                 ▼
+         ┌───────────────┐
+         │ build artifact│  always
+         └───────────────┘
+                 │
+                 │  and, only if the config says "publish": "ingest"
+                 ▼
+            POST /ingest ────▶ ┌─────────────────────────┐
+                               │ a dashboard you host    │
+                               │ web server + Postgres   │
+                               └─────────────────────────┘
+                                            │
+                                            ▼
+                                        one board
+```
+
+One dashboard receives from as many of these repositories as you like, across
+organisations. Each one scans only the systems its own config names.
+
+The allowlist decides which repository may publish which systems, and the
+audience pins what a scanner's token must be minted for. **Until both are set,
+`/ingest` is off and returns 503** — so a team can adopt the scanner before
+anyone has a board, and the scores wait in the artifacts.
+
+Hosting the board: [dashboard/README.md](dashboard/README.md#run-it-split-up).
+The workflow to copy: [Using it](#using-it), below.
+
 ## Using it
 
 The engine ships as a composite action so that the code and the scanner versions
@@ -100,7 +156,7 @@ thousand lines of Ruby needs Rubocop. That scan fails and says so rather than
 scoring the Ruby clean; `install-ruby: true` (or `install-elixir: true`) forces
 the toolchain in without misdeclaring the stack.
 
-### Configuration
+### Where the engine reads and writes
 
 The caller says what to measure; the engine says how. Four locations come from
 the environment:
@@ -127,7 +183,7 @@ than resolved, because it is two answers to one question.
 {
   "systems": {
     "billing": { "repo": "org/billing",  "stack": "elixir" },  // clone from GitHub
-    "web":     { "path": "code/web",     "stack": "typescript" }  // a folder here
+    "web":     { "path": "code/web",     "stack": "ts" }  // a folder here
   }
 }
 ```
