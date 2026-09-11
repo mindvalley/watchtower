@@ -1,35 +1,32 @@
 # Getting started
 
-Clone to a board with numbers on it, on one machine, in about fifteen minutes.
-
-Everything here was done on a clean clone before it was written down. Where a
-step needs something you probably do not have, it says so rather than assuming.
+Clone to a board with numbers on it, on one machine.
 
 ## What you need
 
-- **Node 20 or newer.** The board asks for 22.
+- **Node 22 or newer.** The scanner alone runs on 20; the board needs 22.
 - **Docker**, for the database. Only if you want the board — the scanner writes
   JSON without it.
-- **Five scanners**, below. Four of the seven criteria need none of them, but
-  you cannot assemble a score without all seven, so a board needs all five.
+- **Five command-line scanners**, installed in step 1. Three of the seven scans
+  need them, and you need all seven scans to get a score, so you need all five.
 
 ## 1. Install the scanners
 
 Their versions are part of the measurement: change one and you have changed the
 ruler. These are the pinned versions, the same ones the GitHub action installs.
 
-Three come from Python. `pipx` is the tidy way and CI runners have it; a
-laptop often does not, so install it first or use `pip` instead.
+Three come from Python. A virtual environment is the route that works
+everywhere and needs no administrator rights:
 
 ```sh
-# pipx, if you do not have it: brew install pipx  (or python3 -m pip install --user pipx)
-pipx install "semgrep==1.78.0"
-pipx install "lizard==1.23.0"
-pipx install "graphifyy==0.9.28"
-
-# or, without pipx:
-python3 -m pip install --user "semgrep==1.78.0" "lizard==1.23.0" "graphifyy==0.9.28"
+python3 -m venv ~/.watchtower-tools
+~/.watchtower-tools/bin/pip install "semgrep==1.78.0" "lizard==1.23.0" "graphifyy==0.9.28"
+export PATH="$HOME/.watchtower-tools/bin:$PATH"   # add to your shell profile
 ```
+
+`pipx install "semgrep==1.78.0"` and so on is tidier if you already have pipx —
+CI runners do. **`pip install --user` does not work**: Homebrew and Debian mark
+their Python as externally managed, and pip refuses (PEP 668).
 
 Two are single binaries — release tarballs, or your package manager if it can
 pin the version:
