@@ -42,9 +42,9 @@ without a hosted board — the scan still runs and uploads its results.
 
 | They want | Configuration | Read |
 |---|---|---|
-| A score for one codebase | Local | [`guides/getting-started.md`](guides/getting-started.md), steps 1–4 |
+| A score for one codebase | Local | [`guides/local-setup.md`](guides/local-setup.md), steps 1–4 |
 | A board of their own to look at | Local | the same guide, all steps |
-| To see a board before scanning anything | Local, mock data, Docker only | [the demo section](guides/getting-started.md#want-to-see-the-board-before-you-scan-anything) |
+| To see a board before scanning anything | Local, mock data, Docker only | [the demo section](guides/local-setup.md#want-to-see-the-board-before-you-scan-anything) |
 | Scans that run themselves, results as artifacts | Remote | [README → Using it](README.md#using-it) |
 | Scans posting to a shared board | Remote, plus a host | [README → Where the results go](README.md#where-the-results-go) and [dashboard README → Run it split up](dashboard/README.md#run-it-split-up) |
 

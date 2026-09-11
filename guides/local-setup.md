@@ -1,4 +1,12 @@
-# Getting started
+# Local setup
+
+**The local configuration: everything on one machine.** You install the
+scanners, run them against a folder or a cloned repo, and get scores. Optionally
+run the board beside them and load the scores in. Nothing publishes anywhere and
+no credentials are needed. This is the default.
+
+For scans that run themselves in CI and post to a board somebody hosts, see
+[Configuration](../README.md#configuration) in the README instead.
 
 Clone to a board with numbers on it, on one machine.
 
