@@ -5,10 +5,10 @@
   "private": true,
   "license": "UNLICENSED",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "dependencies": {
-    "js-yaml": "4.1.0"
+    "js-yaml": "^4.3.2"
   },
   "scripts": {
     "test": "node --test tests/benchmark/*.test.js"

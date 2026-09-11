@@ -31,6 +31,8 @@ function gitRepo(name) {
   git(d, 'init', '--quiet', '-b', 'main');
   git(d, 'config', 'user.email', 'test@example.invalid');
   git(d, 'config', 'user.name', 'test');
+  // Developers usually sign their commits locally so we need to disable that.
+  git(d, 'config', 'commit.gpgsign', 'false');
   return d;
 }
 

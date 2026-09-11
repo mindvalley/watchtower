@@ -1,8 +1,7 @@
 'use strict';
 
 // GitHub Actions OIDC verifier. jose is ESM-only, so it is loaded via dynamic
-// import (never require) and cached, keeping this CommonJS module working on
-// Node 20/22/24.
+// import (never require) and cached, keeping this CommonJS module working.
 
 const DEFAULT_ISSUER = 'https://token.actions.githubusercontent.com';
 const DEFAULT_JWKS_URL = 'https://token.actions.githubusercontent.com/.well-known/jwks';

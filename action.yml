@@ -20,7 +20,7 @@ inputs:
   node-version:
     description: Node version used to run the engine.
     required: false
-    default: "20"
+    default: "24"
   config:
     description: >-
       Path to the watchtower configuration, relative to the workspace. Read
