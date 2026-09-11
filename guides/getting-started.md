@@ -2,6 +2,16 @@
 
 Clone to a board with numbers on it, on one machine.
 
+**This covers the default setup: TypeScript, JavaScript and Python codebases.**
+Those need only the five scanners in step 1, and all seven criteria are measured.
+
+**Elixir and Ruby need one more thing each** — Elixir with `mix` for Credo, Ruby
+with `rubocop` — because those are the linters that measure complexity on that
+source, and Elixir also parses its own API declarations. Install the toolchain,
+declare the stack, and the rest of this guide is unchanged. In CI you do not
+install anything: the action reads your configuration and brings the toolchain
+for whatever language it declares. See [Toolchains](../README.md#toolchains-are-installed-from-what-you-declare).
+
 ## What you need
 
 - **Node 22 or newer.** The scanner alone runs on 20; the board needs 22.
@@ -58,6 +68,8 @@ this machine. Exactly one; both is refused.
 
 `stack` must be one of **`elixir`, `ruby`, `ts`, `js`, `python`**. It is the
 language of the backend, and it decides which observability and API readers run.
+`ts`, `js` and `python` need nothing beyond step 1; `elixir` and `ruby` need
+their own toolchain, as above.
 
 ## 3. Scan
 
