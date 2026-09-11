@@ -21,6 +21,6 @@
     "supertest": "^6.3.4"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   }
 }
