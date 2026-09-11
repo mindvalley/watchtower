@@ -11,7 +11,7 @@ few routes; the pages are plain HTML with plain script tags.
 
 ## Run it on one machine
 
-Needs Node 22 or newer, and Docker for the database.
+Needs Node 24 or newer, and Docker for the database.
 
 ```sh
 docker compose -f docker-compose.example.yml up -d

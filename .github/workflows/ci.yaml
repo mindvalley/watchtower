@@ -22,7 +22,7 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "24"
 
       # js-yaml is the engine's only dependency. Installing from the lockfile so
       # a test run cannot silently pick up a different version of the parser
@@ -59,10 +59,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # The board asks for 22 or newer; the scanner runs on 20.
       - uses: actions/setup-node@v5
         with:
-          node-version: "22"
+          node-version: "24"
 
       - run: npm ci --no-audit --no-fund
 
