@@ -22,7 +22,7 @@ for whatever language it declares. See [Toolchains](../README.md#toolchains-are-
 
 ## What you need
 
-- **Node 22 or newer.** The scanner alone runs on 20; the board needs 22.
+- **Node 24 or newer.**
 - **Docker**, for the database. Only if you want the board — the scanner writes
   JSON without it.
 - **Five command-line scanners**, installed in step 1. Three of the seven scans
