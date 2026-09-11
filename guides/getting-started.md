@@ -66,6 +66,9 @@ One file, `watchtower.config.json`, beside where you will run:
 A system declares **`repo`** to clone from GitHub, or **`path`** for a folder on
 this machine. Exactly one; both is refused.
 
+**`path` is resolved against the config file, not against where you run the
+command.** An absolute path avoids the question.
+
 `stack` must be one of **`elixir`, `ruby`, `ts`, `js`, `python`**. It is the
 language of the backend, and it decides which observability and API readers run.
 `ts`, `js` and `python` need nothing beyond step 1; `elixir` and `ruby` need

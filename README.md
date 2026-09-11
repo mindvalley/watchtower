@@ -127,7 +127,7 @@ than resolved, because it is two answers to one question.
 {
   "systems": {
     "billing": { "repo": "org/billing",  "stack": "elixir" },  // clone from GitHub
-    "web":     { "path": "code/web",     "stack": "typescript" }  // a folder here
+    "web":     { "path": "code/web",     "stack": "ts" }  // a folder here
   }
 }
 ```
