@@ -27,8 +27,6 @@
 
 </div>
 <script>
-const STATUS_CLASS = { scored: 'status-scored', pending: 'status-pending' };
-
 function esc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -45,7 +43,6 @@ function currentSlug() {
 
 // prev/next are the neighbouring criteria objects (or null/undefined).
 function renderDetail(c, prev, next) {
-  const statusClass = STATUS_CLASS[c.status] || 'status-pending';
   const how = c.how || {};
   const howRows = [
     how.tools ? `<div class="crit-how-row"><span class="k">Tools · </span>${esc(how.tools)}</div>` : '',
@@ -70,7 +67,6 @@ function renderDetail(c, prev, next) {
         <div class="header-title">${esc(c.name)}</div>
         <div class="header-sub">Agentic Compatibility Benchmark</div>
       </div>
-      <div class="header-badge"><span class="status-chip ${statusClass}">${esc(c.status)}</span></div>
     </header>
     <section class="panel">
       <div class="crit-one-liner">${esc(c.one_liner)}</div>

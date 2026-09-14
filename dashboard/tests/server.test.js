@@ -92,7 +92,6 @@ test('GET /data/criteria-docs.json is valid and includes C9 with triage nuances'
   const data = JSON.parse(res.text);
   const c9 = (data.criteria || []).find((c) => c.id === '9');
   assert.ok(c9, 'C9 entry missing');
-  assert.strictEqual(c9.status, 'scored');
   assert.ok((c9.nuances || []).length >= 1, 'C9 should document its triage nuances');
 });
 
