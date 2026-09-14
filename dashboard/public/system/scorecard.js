@@ -427,7 +427,7 @@ async function initScorecard(systemKey) {
     return `
       <tr>
         <td style="color:var(--text-muted);font-weight:600">${i + 1}</td>
-        <td><div class="criterion-name"><a href="/criteria/${slug}" style="color:var(--text)">${label}</a>${scored ? ' <span style="font-size:var(--fs-micro);font-weight:700;color:#3fb950;background:#3fb95022;border:1px solid #3fb95044;border-radius:3px;padding:1px 5px;vertical-align:middle;letter-spacing:.04em">REAL</span>' : ''}</div></td>
+        <td><div class="criterion-name"><a href="/criteria/${slug}" style="color:var(--text)">${label}</a></div></td>
         <td>${scoreHtml}</td>
         <td>${findingsHtml}${trailHtml}${findingsExpander}</td>
       </tr>`;
