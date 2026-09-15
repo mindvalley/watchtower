@@ -64,6 +64,32 @@ test('C6 untested samples + discipline map to groups; empty criteria omitted', a
   assert.strictEqual(env.criteria['9'], undefined); // no C9 reports -> omitted
 });
 
+// The scan keeps 20 untested files per stack. A list that stops there and says
+// nothing reads as the complete set — which is how 40 rows stood in for 977.
+test('C6 breadth says how many untested files the sample left out, and only when it did', async () => {
+  const stacks = (elixirSamples, frontendSamples) => ({
+    'test-coverage': {
+      applicable: true,
+      stacks: {
+        elixir: { source_files: 10, tested_files: 9, untested_samples: elixirSamples, tooling: { tool: 'cobertura-action', present: true, thresholds: [80], enforced: true } },
+        frontend: { source_files: 6, tested_files: 0, untested_samples: frontendSamples, tooling: { tool: 'vitest/jest', present: true, thresholds: [80], enforced: true } },
+      },
+    },
+  });
+  const labelFor = async (map) => {
+    const env = await buildFindingsForSystem({ sys: { name: 'sys', stack: 'elixir' }, readReport: reader(map), sastTool: 'semgrep', triageConfig: {}, generatedAt: '2026-09-15' });
+    return env.criteria['6'].groups.find((g) => g.sub === 'breadth').label;
+  };
+
+  // 1 + 6 untested, 2 shown.
+  assert.strictEqual(await labelFor(stacks(['lib/a.ex'], ['assets/x.ts'])), 'Untested source files — 2 of 7');
+
+  // Every untested file is in the sample: no count, or the label would imply a
+  // truncation that did not happen.
+  const all = ['assets/1.ts', 'assets/2.ts', 'assets/3.ts', 'assets/4.ts', 'assets/5.ts', 'assets/6.ts'];
+  assert.strictEqual(await labelFor(stacks(['lib/a.ex'], all)), 'Untested source files');
+});
+
 test('C2 with rest block: produces rest-descriptions group with undescribed kinds only', async () => {
   const map = {
     'documented-apis': {
