@@ -107,13 +107,21 @@ async function c6Groups(sys, readReport) {
   const r = await readReport(sys.name, 'test-coverage');
   if (!r || !r.stacks) return [];
   const untested = []; const discipline = [];
+  let untestedTotal = 0;
   for (const [stack, s] of Object.entries(r.stacks)) {
+    untestedTotal += (Number(s.source_files) || 0) - (Number(s.tested_files) || 0);
     for (const f of (s.untested_samples || [])) untested.push({ file: f, stack });
     const t = s.tooling || {};
     const status = t.enforced ? `enforced (${(t.thresholds || []).join('/')})` : (t.present ? 'configured, no gate' : 'no coverage tool');
     if (!t.enforced) discipline.push({ stack, status });
   }
-  return [group('breadth', 'Untested source files', null, untested), group('discipline', 'Coverage enforcement', null, discipline)];
+  // The scan keeps 20 untested files per stack, so a two-stack repo shows 40 of
+  // however many there are. Unlabelled, that reads as the whole list, and the cap
+  // does not even land on a round number a reader would question.
+  const breadthLabel = untested.length < untestedTotal
+    ? `Untested source files — ${untested.length} of ${untestedTotal}`
+    : 'Untested source files';
+  return [group('breadth', breadthLabel, null, untested), group('discipline', 'Coverage enforcement', null, discipline)];
 }
 
 async function c7Groups(sys, readReport) {
