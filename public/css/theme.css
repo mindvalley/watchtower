@@ -714,15 +714,6 @@
 }
 
 /* ── Criteria reference (index + per-criterion pages) ── */
-.status-chip {
-  display:inline-flex; align-items:center; font-size:var(--fs-micro); font-weight:700;
-  letter-spacing:.05em; text-transform:uppercase; border-radius:4px; padding:2px 8px;
-}
-.status-scored  { color:var(--green);  background:rgba(63,185,80,0.14);  border:1px solid rgba(63,185,80,0.33); }
-.status-pending { color:var(--accent); background:rgba(88,166,255,0.12); border:1px solid rgba(88,166,255,0.30); }
-
-.crit-legend { display:flex; flex-wrap:wrap; gap:16px; margin-bottom:24px; font-size:var(--fs-xs); color:var(--text-muted); }
-.crit-legend .status-chip { margin-right:6px; }
 
 /* Index list */
 .crit-list { display:flex; flex-direction:column; gap:10px; }

@@ -28,7 +28,6 @@
   </header>
 
   <main>
-    <div class="crit-legend" id="legend"></div>
     <div class="crit-list" id="criteria-list"></div>
   </main>
 
@@ -39,8 +38,6 @@
 
 </div>
 <script>
-const STATUS_CLASS = { scored: 'status-scored', pending: 'status-pending' };
-
 function esc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -48,13 +45,11 @@ function esc(s) {
 
 // `n` is the contiguous display position (1..N); c.id is the internal/data key.
 function renderItem(c, n) {
-  const statusClass = STATUS_CLASS[c.status] || 'status-pending';
   return `
     <a class="crit-list-item" href="/criteria/${c.slug}">
       <div class="crit-list-head">
         <span class="crit-id">${n}</span>
         <span class="crit-name">${esc(c.name)}</span>
-        <span class="status-chip ${statusClass}">${esc(c.status)}</span>
         <span class="crit-list-arrow">read →</span>
       </div>
       <div class="crit-list-desc">${esc(c.one_liner)}</div>
@@ -69,10 +64,6 @@ async function init() {
       () => Loading.getJson('/data/criteria-docs.json'),
     );
     const criteria = data.criteria || [];
-
-    const legend = data.status_legend || {};
-    document.getElementById('legend').innerHTML = Object.entries(legend).map(([k, v]) =>
-      `<span><span class="status-chip ${STATUS_CLASS[k] || ''}">${esc(k)}</span>${esc(v)}</span>`).join('');
 
     document.getElementById('criteria-list').innerHTML =
       criteria.map((c, i) => renderItem(c, i + 1)).join('');
