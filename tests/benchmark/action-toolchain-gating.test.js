@@ -23,7 +23,7 @@ const DECIDER = indexOf((s) => s.id === 'toolchains');
 
 test('a step reads the configuration and publishes the decision as outputs', () => {
   assert.notEqual(DECIDER, -1, 'no step with id `toolchains`');
-  assert.match(STEPS[DECIDER].run, /required-toolchains\.js/);
+  assert.match(STEPS[DECIDER].run, /dist\/required-toolchains\.js/);
 });
 
 // After setup-node deliberately: reading the config with the same Node the scan

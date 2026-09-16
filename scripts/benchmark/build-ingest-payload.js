@@ -51,7 +51,7 @@ function buildIngestPayload({ benchmark, findings, systemKey }) {
 module.exports = { buildIngestPayload };
 
 // --- I/O edge -------------------------------------------------------------
-// Usage: node scripts/benchmark/build-ingest-payload.js <system> [outFile]
+// Usage: node dist/build-ingest-payload.js <system> [outFile]
 // Writes the payload to outFile (or stdout). Never prints it to stderr, so a
 // CI log cannot accidentally capture findings content.
 if (require.main === module) {

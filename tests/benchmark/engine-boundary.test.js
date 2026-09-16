@@ -3,23 +3,13 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 
-// The scanning engine is distributed as its own repo that several organisations
-// read from. That is only possible because nothing in scripts/benchmark/ reaches
-// outside its own directory — it uses Node built-ins and js-yaml and nothing else.
-//
-// Today that is true by accident of how it was written. These tests make it true
-// on purpose. Without them, an ordinary-looking `require('../../db/model')` added
-// next month would not fail anything, and we would discover it while trying to
-// move the directory — at which point the fix is untangling rather than a move.
-//
-// If one of these fails, the question is not "how do I satisfy the test" but
-// "does this belong in a shared engine at all".
+// What anyone runs is dist/, one ncc bundle per program. ncc rewrites requires,
+// so imports survive bundling. It does not rewrite what a program works out
+// about its own location: in a bundle __dirname is dist/, not this directory.
+// A file that climbs out of here builds clean and reads the wrong path at run
+// time. These tests guard run-time reach.
 
 const ENGINE_DIR = path.join(__dirname, '..', '..', 'scripts', 'benchmark');
-
-// Declared in scripts/benchmark/package.json. Anything outside this set and the
-// Node built-ins would have to be installed by every org running the engine.
-const ALLOWED_PACKAGES = new Set(['js-yaml']);
 
 function engineFiles() {
   return fs.readdirSync(ENGINE_DIR).filter((f) => f.endsWith('.js'));
@@ -52,7 +42,7 @@ test('no engine file requires anything outside its own directory', () => {
   const escapes = [];
   for (const file of engineFiles()) {
     for (const spec of requiresIn(file)) {
-      if (!spec.startsWith('.')) continue; // package or built-in, checked below
+      if (!spec.startsWith('.')) continue; // package or built-in, ncc resolves it
       const resolved = path.resolve(ENGINE_DIR, spec);
       if (!resolved.startsWith(ENGINE_DIR + path.sep)) {
         escapes.push(`${file} → ${spec}`);
@@ -62,27 +52,7 @@ test('no engine file requires anything outside its own directory', () => {
   assert.deepStrictEqual(
     escapes,
     [],
-    `these reach outside the engine and would break extraction:\n  ${escapes.join('\n  ')}`,
-  );
-});
-
-test('the engine depends on no third-party package beyond what it declares', () => {
-  const builtins = new Set(require('node:module').builtinModules);
-  const undeclared = new Set();
-
-  for (const file of engineFiles()) {
-    for (const spec of requiresIn(file)) {
-      if (spec.startsWith('.')) continue;
-      const bare = spec.replace(/^node:/, '').split('/')[0];
-      if (builtins.has(bare) || ALLOWED_PACKAGES.has(bare)) continue;
-      undeclared.add(`${file} → ${spec}`);
-    }
-  }
-
-  assert.deepStrictEqual(
-    [...undeclared],
-    [],
-    `every org running the engine would have to install these:\n  ${[...undeclared].join('\n  ')}`,
+    `these pull code from outside the engine into every bundle:\n  ${escapes.join('\n  ')}`,
   );
 });
 
@@ -117,31 +87,6 @@ test('no engine file computes a path outside its own directory', () => {
   );
 });
 
-// Nested beside the engine here, at the repo root once extracted. Found by
-// walking up rather than by hardcoding either, so this test is true in both
-// layouts — and it throws rather than passing quietly if there is no manifest
-// at all.
-function engineManifest() {
-  let dir = ENGINE_DIR;
-  for (;;) {
-    const candidate = path.join(dir, 'package.json');
-    if (fs.existsSync(candidate)) return JSON.parse(fs.readFileSync(candidate, 'utf8'));
-    const parent = path.dirname(dir);
-    if (parent === dir) throw new Error(`no package.json at or above ${ENGINE_DIR}`);
-    dir = parent;
-  }
-}
-
-test('the engine manifest declares exactly the packages the code uses', () => {
-  // The manifest is what a consuming repo installs from. If it drifts from the
-  // code, extraction produces a package that fails on first run in someone
-  // else's org rather than here.
-  assert.deepStrictEqual(
-    Object.keys(engineManifest().dependencies || {}).sort(),
-    [...ALLOWED_PACKAGES].sort(),
-  );
-});
-
 test('nothing that travels with the engine climbs out of its directory', () => {
   // Any `../` at all, anywhere, in any file type. No delimiter requirement.
   //
@@ -168,17 +113,17 @@ test('nothing that travels with the engine climbs out of its directory', () => {
   );
 });
 
-test('the engine ships no program that calls something outside itself', () => {
-  // The specific shape that got through: a driver script invoking a sibling of
-  // the engine directory. A standalone copy has no such sibling, so the file is
-  // broken by construction there while passing every test here.
+test('the engine ships no program that shells out to another script by path', () => {
   const offenders = [];
   for (const file of allEngineFiles()) {
     const full = path.join(ENGINE_DIR, file);
     if (!fs.statSync(full).isFile()) continue;
-    const src = fs.readFileSync(full, 'utf8');
-    for (const m of src.matchAll(/\bnode\s+(?!scripts\/benchmark\/)([A-Za-z0-9_.\/-]+\.js)/g)) {
-      offenders.push(`${file} → node ${m[1]}`);
+    const lines = fs.readFileSync(full, 'utf8').split('\n')
+      .filter((line) => !/^\s*(\/\/|#|\*)/.test(line));
+    for (const line of lines) {
+      for (const m of line.matchAll(/\bnode\s+([A-Za-z0-9_.\/$'"{}-]*[A-Za-z0-9_-]\.js)/g)) {
+        offenders.push(`${file} → node ${m[1]}`);
+      }
     }
   }
   assert.deepStrictEqual(offenders, []);

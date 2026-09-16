@@ -125,7 +125,7 @@ scanner produces numbers that look comparable and are not.
   with:
     config: config/systems.json
 
-- run: node "${{ steps.engine.outputs.engine-path }}/scripts/benchmark/scan-security.js"
+- run: node "${{ steps.engine.outputs.engine-path }}/dist/scan-security.js"
   env:
     SYSTEM: my-service
     GH_TOKEN: ${{ steps.token.outputs.token }}
@@ -237,8 +237,9 @@ npm install
 npm test
 ```
 
-The suite runs offline and needs nothing but Node and `js-yaml`. Two tests
-exercise Elixir AST helpers and are skipped when Elixir is absent.
+The suite runs offline and needs nothing but Node, `js-yaml` and `@vercel/ncc`.
+All dependencies are for development only and are not installed while running.
+Some tests exercise Elixir AST helpers and are skipped when Elixir is absent.
 
 ## Status
 
