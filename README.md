@@ -241,6 +241,17 @@ The suite runs offline and needs nothing but Node, `js-yaml` and `@vercel/ncc`.
 All dependencies are for development only and are not installed while running.
 Some tests exercise Elixir AST helpers and are skipped when Elixir is absent.
 
+### Keeping `dist/` in sync
+
+What anyone runs is `dist/` built by `npm run build` and committed. In local
+development you can use i.e watchexec to always rebuild things in background:
+
+```bash
+watchexec --watch scripts/benchmark --exts js,json,exs -- npm run build
+```
+
+You can also run the files in scripts/benchmark themselves, they still work as before.
+
 ## Status
 
 Used in production by Mindvalley across three organisations. Open-sourcing
