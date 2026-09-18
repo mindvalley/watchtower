@@ -64,7 +64,7 @@ outputs:
   engine-path:
     description: >-
       Absolute path to the engine. Scan programs live at
-      <engine-path>/scripts/benchmark/scan-*.js
+      <engine-path>/dist/scan-*.js
     # Handed out by the first step below rather than read directly here.
     # github.action_path does not resolve in this block — it exists only inside
     # the action's own steps — so this was an empty string for every caller.
@@ -77,15 +77,15 @@ runs:
     # takes to install six scanners.
     #
     # An empty path is not a visible failure by itself: the caller joins it to a
-    # filename and node reports a missing module at /scripts/benchmark/..., which
-    # reads like a broken engine rather than a broken handover. This says where
-    # the engine is only after checking something is there.
+    # filename and node reports a missing module at /dist/..., which reads like
+    # a broken engine rather than a broken handover. This says where the engine
+    # is only after checking something is there.
     - name: Locate the engine
       id: locate
       shell: bash
       run: |
         set -euo pipefail
-        if [ ! -f "${GITHUB_ACTION_PATH}/scripts/benchmark/scan-security.js" ]; then
+        if [ ! -f "${GITHUB_ACTION_PATH}/dist/scan-security.js" ]; then
           echo "The engine is not where this action is: ${GITHUB_ACTION_PATH}" >&2
           exit 1
         fi
@@ -95,14 +95,6 @@ runs:
     - uses: actions/setup-node@v5
       with:
         node-version: ${{ inputs.node-version }}
-
-    # The engine declares exactly one dependency (js-yaml, used by the OpenAPI
-    # reader). Installing into the action's own directory keeps it off the
-    # caller's dependency tree entirely.
-    - name: Install engine dependencies
-      shell: bash
-      working-directory: ${{ github.action_path }}
-      run: npm install --no-audit --no-fund
 
     # Ask the configuration what it needs before installing anything for it.
     #
@@ -128,7 +120,7 @@ runs:
         INSTALL_RUBY: ${{ inputs.install-ruby }}
       run: |
         set -euo pipefail
-        node "${GITHUB_ACTION_PATH}/scripts/benchmark/required-toolchains.js"
+        node "${GITHUB_ACTION_PATH}/dist/required-toolchains.js"
 
     - uses: erlef/setup-beam@v1
       if: steps.toolchains.outputs.elixir == 'true'

@@ -24,12 +24,20 @@ jobs:
         with:
           node-version: "24"
 
-      # js-yaml is the engine's only dependency. Installing from the lockfile so
-      # a test run cannot silently pick up a different version of the parser
-      # that reads OpenAPI files out of the repositories we scan.
+      # All dependencies are for development only and are not installed while
+      # running.
       - run: npm ci --no-audit --no-fund
 
       - run: npm test
+
+      - name: The committed bundles match the sources
+        run: |
+          npm run build
+          if [ -n "$(git status --porcelain -- dist)" ]; then
+            echo "dist/ does not match scripts/benchmark — run npm run build and commit the result" >&2
+            git status --porcelain -- dist >&2
+            exit 1
+          fi
 
   dashboard:
     runs-on: ubuntu-latest

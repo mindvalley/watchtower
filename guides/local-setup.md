@@ -166,7 +166,7 @@ same ruler:
 ```yaml
 - uses: mindvalley/watchtower@v1
   id: engine
-- run: node "${{ steps.engine.outputs.engine-path }}/scripts/benchmark/scan-security.js"
+- run: node "${{ steps.engine.outputs.engine-path }}/dist/scan-security.js"
   env:
     SYSTEM: my-service
     WATCHTOWER_CONFIG: watchtower.config.json
