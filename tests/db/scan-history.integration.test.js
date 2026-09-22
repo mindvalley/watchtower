@@ -220,18 +220,16 @@ test('the start date hides early noise without deleting it', { skip }, async () 
   const pool = await fresh();
   try {
     await upsertAll(pool, { systems: [SYS()], criteria: [], findings: [] });
-    // Spanning the default cutoff of 2026-08-03. The July entries are the ones
-    // that mislead — a benchmark still growing its criteria and correcting its
-    // scanner — and they are noise in a chart, not wrong data.
+    // Spanning the default cutoff of 2026-08-27; earlier entries are hidden.
     await backfillScanHistory(pool, [
-      ['2026-07-01', 5.0], ['2026-07-30', 2.7], ['2026-08-03', 2.6], ['2026-08-11', 2.6],
+      ['2026-07-01', 5.0], ['2026-08-10', 2.7], ['2026-08-27', 2.6], ['2026-09-03', 2.6],
     ].map(([d, score]) => ({
       system_key: 'alpha', recorded_at: `${d}T10:00:00Z`, scanned_at: d,
       score, colour: 'red', hard_capped: false, coverage: '7 of 7 assessed', criteria: {},
     })));
 
     const shown = await fetchScanHistory(pool, 'alpha');
-    assert.deepStrictEqual(shown.map((h) => h.scanned_at), ['2026-08-03', '2026-08-11'],
+    assert.deepStrictEqual(shown.map((h) => h.scanned_at), ['2026-08-27', '2026-09-03'],
       'the default view starts where the measurements became comparable');
 
     // Nothing was thrown away — the same rows are still there to be asked for.
@@ -240,8 +238,8 @@ test('the start date hides early noise without deleting it', { skip }, async () 
     assert.strictEqual(all[0].scanned_at, '2026-07-01');
 
     // And the boundary is inclusive, so the first comparable scan is not lost.
-    const from = await fetchScanHistory(pool, 'alpha', { since: '2026-08-11' });
-    assert.deepStrictEqual(from.map((h) => h.scanned_at), ['2026-08-11']);
+    const from = await fetchScanHistory(pool, 'alpha', { since: '2026-09-03' });
+    assert.deepStrictEqual(from.map((h) => h.scanned_at), ['2026-09-03']);
   } finally {
     await pool.end();
   }
@@ -264,8 +262,8 @@ test('the fleet reader returns every system in one statement, oldest first', { s
     });
 
     await backfillScanHistory(pool, [
-      ['alpha', '2026-08-03', 3.4], ['alpha', '2026-08-11', 3.5], ['alpha', '2026-08-21', 3.6],
-      ['beta', '2026-08-03', 2.0], ['beta', '2026-08-21', 1.8],
+      ['alpha', '2026-08-31', 3.4], ['alpha', '2026-09-07', 3.5], ['alpha', '2026-09-14', 3.6],
+      ['beta', '2026-08-27', 2.0], ['beta', '2026-09-14', 1.8],
       // Before the window — must be excluded by the default `since`.
       ['alpha', '2026-07-01', 5.0],
     ].map(([system_key, d, score]) => ({
@@ -279,15 +277,15 @@ test('the fleet reader returns every system in one statement, oldest first', { s
     // because the shape the database returns is the thing that has to line up:
     // `score` comes back through node-postgres, and a NUMERIC column would
     // arrive as a string and quietly make every delta NaN.
-    const out = rowsToHistory(rows, { since: '2026-08-03' });
+    const out = rowsToHistory(rows, { since: '2026-08-27' });
 
     assert.deepStrictEqual(Object.keys(out.systems).sort(), ['alpha', 'beta']);
     assert.deepStrictEqual(out.systems.alpha.points.map((p) => p.date),
-      ['2026-08-03', '2026-08-11', '2026-08-21'], 'oldest first, and July excluded by the window');
-    // 0.1 not 0.2: alpha's baseline is 11 Aug, a week back. Beta has nothing in
-    // that week and falls back to 3 Aug.
+      ['2026-08-31', '2026-09-07', '2026-09-14'], 'oldest first, and July excluded by the window');
+    // 0.1 not 0.2: alpha's baseline is 7 Sept, a week back. Beta has nothing in
+    // that week and falls back to 27 Aug.
     assert.strictEqual(out.systems.alpha.movement.delta, 0.1);
-    assert.strictEqual(out.systems.alpha.movement.from, '2026-08-11');
+    assert.strictEqual(out.systems.alpha.movement.from, '2026-09-07');
     assert.strictEqual(out.systems.beta.movement.delta, -0.2, 'a decline reads as a decline');
     assert.strictEqual(out.systems.beta.movement.days, 18);
     assert.strictEqual(typeof out.systems.alpha.movement.to_score, 'number',
