@@ -234,29 +234,29 @@ async function replaceSystem(pool, { system, criteria = [], findings = [], publi
 // should start. Everything earlier is still stored — this hides noise, it does
 // not delete evidence, the same shape as an allowance.
 //
-// 2026-08-03 is the first date on which every system was measured by ONE
-// generation of the scanner with the full criterion set. Two things had to
-// settle for that:
+// 2026-08-27 is the day the composite became the single number out of 100 that
+// the board actually shows. Two discontinuities sit behind the date, and the
+// floor is the LATER of them:
 //
-//   - the criteria stopped being added. C1 went live on all eleven on 30 July;
-//     before that a rising score often just meant another criterion arriving.
-//   - the rulers converged. The corrected complexity scanner reached the last
-//     six systems on 3 August and moved them by around a point — for two days
-//     the board carried five systems measured one way beside six measured
-//     another.
+//   - Comparability. By early August the criteria had stopped being added (C1
+//     went live on all eleven on 30 July) and the corrected complexity scanner
+//     had converged across the fleet. Before that a rising score often just
+//     meant another criterion arriving or a ruler being fixed — a line from
+//     1 July mixes coverage growth and scanner corrections in with real
+//     movement, and one system read 5.0 in July and 2.6 in August almost
+//     entirely for those reasons.
+//   - Presentation. On 27 August the composite was re-ruled to `round(mean × 20
+//     × cap)` out of 100 with the bands rescaled. A line crossing that day
+//     mixes a change in how the number is computed and shown with a change in
+//     the system itself, which is exactly what a trend must not do.
 //
-// So a line drawn from 1 July mixes three separate things — coverage growing, a
-// triage layer landing, and the scanner being corrected — in with real movement.
-// One system reading 5.0 in July and 2.6 in August was almost entirely the
-// first two.
-//
-// Coverage was the obvious alternative cutoff and does not work: in the fleet
-// this was measured on, only four of eleven ever reached "7 of 7" — some
-// systems have no boundary score at all and sit at 6 of 7 by an accepted
-// decision. Checked before choosing.
+// So the chart starts on 27 August: the first date every point is the same kind
+// of number, measured the same way and shown the same way. This is our
+// instance's start; a different deployment sets its own via the env var, and the
+// per-system reference-date mechanism (with reasons) is the general form of it.
 //
 // Override with WATCHTOWER_HISTORY_START; set it empty to show everything.
-const HISTORY_START = process.env.WATCHTOWER_HISTORY_START ?? '2026-08-03';
+const HISTORY_START = process.env.WATCHTOWER_HISTORY_START ?? '2026-08-27';
 
 // One system's scan history, oldest first — the shape a trend line reads.
 // `criteria` comes back as the stored map so a past scorecard can be rebuilt,

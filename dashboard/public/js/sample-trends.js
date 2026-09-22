@@ -1,33 +1,25 @@
 'use strict';
 
 // ┌───────────────────────────────────────────────────────────────────────────┐
-// │ SAMPLE DATA. Every number this file produces is invented.                 │
+// │ SAMPLE DATA for the ISSUES chart only. Every number here is invented.      │
 // │                                                                           │
-// │ It exists so the trend charts can be judged before the data behind them   │
-// │ is real, and it is deleted the moment it is. Removing it is one script    │
-// │ tag and one file — nothing else imports it, and a test asserts the page   │
-// │ marks every chart drawn from it.                                          │
+// │ The composite chart went live on real scan history (composite-trend.js);  │
+// │ this now backs only the Issues chart, and it is deleted the moment that    │
+// │ series is real too. Removing it is one script tag and one file — nothing   │
+// │ else imports it, and a test asserts the page marks the chart drawn from    │
+// │ it.                                                                        │
 // └───────────────────────────────────────────────────────────────────────────┘
 //
-// WHY EACH CHART IS MOCKED, WHICH IS NOT THE SAME REASON:
+// WHY ISSUES IS STILL MOCKED: the real series does not exist. scan_history keeps
+// scores and audit counts, never the per-finding list, and /ingest full-replaces
+// the findings table — so resolved and introduced cannot be computed for any
+// date, past or future (#91). Everything in that chart is invented, totals too.
 //
-//   Composite — the real series exists and is plotted-able today. It is also
-//   flat for ten of eleven systems since 3 August, because nothing has been
-//   done about the scores yet. A flat chart cannot show whether the chart
-//   works. The LAST point of each line is the system's real current score; the
-//   path leading to it is invented, so the right-hand edge agrees with the card
-//   above it instead of looking like a bug.
-//
-//   Issues — the real series does not exist at all. scan_history keeps scores
-//   and audit counts, never the per-finding list, and /ingest full-replaces the
-//   findings table. Resolved and introduced cannot be computed for any date.
-//   Everything in that chart is invented, including the totals.
-//
-// WHAT IS NOT INVENTED: the shape. The fleet, the organisations, the systems in
-// each tab and the dates all come from the real payload. The page must not
-// carry a list of who we measure — that is what makes it separable from our
-// data — so this cannot name a system even if it wanted to, and deriving the
-// structure keeps the mock honest about how many lines a real chart will have.
+// WHAT IS NOT INVENTED: the shape. The fleet, the systems in each tab and the
+// dates come from the real payload. The page must not carry a list of who we
+// measure — that is what makes it separable from our data — so this cannot name
+// a system even if it wanted to, and deriving the structure keeps the mock
+// honest about how many lines a real chart will have.
 //
 // Determinism is a requirement, not a nicety: a chart that reshuffles on every
 // reload cannot be reviewed, and two people looking at it would be looking at
@@ -69,21 +61,6 @@ function datesEndingAt(endIso, { points, stepDays }) {
   return out;
 }
 
-// Walk BACKWARDS from the real current score, so the series ends where the card
-// says it does. Movement is small and mostly downward-in-the-past, i.e. the
-// invented history shows systems improving — which is the case the chart has to
-// render legibly and the real data cannot currently produce.
-function compositeSeries(key, currentScore, dates) {
-  const seed = hash(key);
-  const values = new Array(dates.length);
-  values[dates.length - 1] = currentScore;
-  for (let i = dates.length - 2; i >= 0; i -= 1) {
-    const drift = Math.round((noise(seed, i) * 5) - 1.2);
-    values[i] = Math.max(2, Math.min(100, values[i + 1] - drift));
-  }
-  return dates.map((date, i) => ({ date, score: values[i] }));
-}
-
 // Resolved and introduced first, total by accumulation — never the other way
 // round. Deriving the parts from an invented total is how the first version of
 // this produced a scan where more issues were introduced than were open, which
@@ -120,12 +97,11 @@ function sampleFor(systems, windowKey, endIso) {
   const scored = systems.filter((s) => typeof s.score === 'number');
   return {
     dates,
-    composite: scored.map((s) => ({ key: s.key, points: compositeSeries(s.key, s.score, dates) })),
     issues: issuesSeries(scored.map((s) => s.key).join('|'), scored.length, dates),
   };
 }
 
-const api = { sampleFor, WINDOWS, hash, noise, datesEndingAt, compositeSeries, issuesSeries };
+const api = { sampleFor, WINDOWS, hash, noise, datesEndingAt, issuesSeries };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 if (typeof window !== 'undefined') window.SampleTrends = api;
 

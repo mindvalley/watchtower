@@ -252,11 +252,51 @@
     margin-right: 6px;
     vertical-align: -1px;
   }
+
+  /* Range controls sit under the composite title, not out to the right the way
+     the old window chips did in the section head. */
+  .wt-chart-box .wt-chips { margin: 2px 0 12px; flex-wrap: wrap; align-items: center; }
+  .wt-custom { display: inline-flex; align-items: center; gap: 6px; margin-left: 2px; }
+  .wt-custom-to { font-size: var(--fs-micro); color: var(--text-muted); }
+  .wt-date {
+    appearance: none;
+    font: inherit;
+    font-size: var(--fs-micro);
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 3px 6px;
+    color-scheme: dark;
+  }
+  /* The legend is the filter. Each entry is a real button; a hidden system is
+     dimmed and its swatch drained of colour, and stays clickable to bring back. */
+  .wt-legend-btn {
+    appearance: none;
+    background: none;
+    border: none;
+    font: inherit;
+    color: inherit;
+    padding: 0;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+  }
+  .wt-legend-btn:hover { color: var(--text); }
+  .wt-legend-btn.wt-off { opacity: 0.4; text-decoration: line-through; }
+  .wt-legend-btn.wt-off i { filter: grayscale(1); }
+  .wt-chart-empty {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    padding: 40px 0;
+    text-align: center;
+  }
 </style>
 <script src="/js/loading.js"></script>
 <script src="/js/criteria.js"></script>
-<!-- Invented numbers for the trend charts, and nothing else. Delete this line
-     and the file it names once the series behind those charts are real. -->
+<script src="/js/composite-trend.js"></script>
+<!-- Invented numbers for the Issues chart, and nothing else. Delete this line
+     and the file it names once resolved/introduced counts are retained (#91). -->
 <script src="/js/sample-trends.js"></script>
 </head>
 <body>
@@ -515,15 +555,12 @@ function fmtDate(iso) {
 // that is going public, where every dependency is something else for a stranger
 // to trust.
 
-// Distinct per-system colours, deliberately NOT the band colours — a line that
-// is red because the system is red would collide with a line that is red
-// because it is the third system in the list.
-const SERIES_COLOURS = [
-  '#58a6ff', '#bc8cff', '#39c5cf', '#f778ba', '#d9a05b',
-  '#7ee787', '#ffa198', '#a5d6ff',
-];
+// The per-system line colours live in composite-trend.js now, so the model and
+// the legend read the same list — a line and its legend entry cannot disagree.
 
 const CHART_W = 660;
+const CHART_LEFT = 44;
+const CHART_RIGHT = CHART_W - 44;
 const CHART_H = 215;
 const PLOT_TOP = 20;
 const PLOT_BOTTOM = 168;
@@ -535,51 +572,80 @@ function gridline(y, label, xFrom) {
       <text x="${xFrom - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end" fill="#8b949e" font-size="10">${label}</text>`;
 }
 
-function dateTicks(dates, xOf) {
-  // Only the ends and a couple between: eleven date labels at this width
-  // overlap into a grey smear.
-  const idx = dates.length <= 4
-    ? dates.map((_, i) => i)
-    : [0, Math.round((dates.length - 1) / 3), Math.round(((dates.length - 1) * 2) / 3), dates.length - 1];
-  return [...new Set(idx)].map((i) => `<text x="${xOf(i).toFixed(1)}" y="${AXIS_Y + 19}"
-        text-anchor="middle" fill="#8b949e" font-size="10">${esc(fmtShortDate(dates[i]))}</text>`).join('');
-}
-
 function fmtShortDate(iso) {
   const [, m, d] = iso.split('-');
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return `${Number(d)} ${months[Number(m) - 1]}`;
 }
 
-function compositeChart(sample) {
-  const { dates, composite } = sample;
-  if (!composite.length || dates.length < 2) return '';
-  const LEFT = 44;
-  const x = (i) => LEFT + (i * (CHART_W - LEFT - 44)) / (dates.length - 1);
-  const y = (v) => PLOT_BOTTOM - (v / 100) * (PLOT_BOTTOM - PLOT_TOP);
+// The range controls that sit above the composite chart. Global state, so a
+// choice made on one org tab holds when the reader switches tabs. The custom
+// inputs only appear when Custom is active, and are bounded by the served
+// window so a date outside the data cannot be typed.
+const RANGE_CHIPS = [['7d', '7 days'], ['30d', '30 days'], ['90d', '90 days'], ['custom', 'Custom']];
 
-  const grid = [0, 25, 50, 75, 100].map((v) => gridline(y(v), String(v), LEFT)).join('');
+function isCustom() {
+  return activeRange && typeof activeRange === 'object';
+}
+
+function rangeControls(floor, latestIso) {
+  const active = isCustom() ? 'custom' : activeRange;
+  const chips = RANGE_CHIPS.map(([v, label]) => `<button class="wt-chip" type="button"
+          data-range="${v}" aria-pressed="${v === active}">${label}</button>`).join('');
+  const custom = isCustom() ? `<span class="wt-custom">
+        <input type="date" class="wt-date" data-edge="from" min="${floor}" max="${latestIso}"
+               value="${esc(activeRange.from || '')}" aria-label="From date">
+        <span class="wt-custom-to">to</span>
+        <input type="date" class="wt-date" data-edge="to" min="${floor}" max="${latestIso}"
+               value="${esc(activeRange.to || '')}" aria-label="To date">
+      </span>` : '';
+  return `<div class="wt-chips">${chips}${custom}</div>`;
+}
+
+// The composite chart, drawn from the real model in composite-trend.js. Points
+// sit at their true time position; the ticks are regular, evenly-spaced dates.
+function compositeChart(model, floor, latestIso) {
+  const controls = rangeControls(floor, latestIso);
+  const y = (v) => PLOT_BOTTOM - (v / 100) * (PLOT_BOTTOM - PLOT_TOP);
+  const grid = [0, 25, 50, 75, 100].map((v) => gridline(y(v), String(v), CHART_LEFT)).join('');
+
+  if (model.empty) {
+    return `<div class="wt-chart-box">
+        <div class="wt-chart-title">Composite score</div>
+        ${controls}
+        <div class="wt-chart-empty">No readings in this range.</div>
+      </div>`;
+  }
+
   // The band edges, so a line crossing into amber is visible as such without
   // anyone having to read the axis.
-  const bands = [[RED_MAX, COLOURS.red], [AMBER_MAX, COLOURS.amber]].map(([v, c]) => `
-      <line x1="${LEFT}" y1="${y(v).toFixed(1)}" x2="${CHART_W - 44}" y2="${y(v).toFixed(1)}"
-            stroke="${c}" stroke-width="1" stroke-dasharray="3 4" opacity="0.35"/>`).join('');
+  const bands = model.bands.map((b) => `
+      <line x1="${CHART_LEFT}" y1="${b.y.toFixed(1)}" x2="${CHART_RIGHT}" y2="${b.y.toFixed(1)}"
+            stroke="${b.colour}" stroke-width="1" stroke-dasharray="3 4" opacity="0.35"/>`).join('');
 
-  const lines = composite.map((s, n) => {
-    const c = SERIES_COLOURS[n % SERIES_COLOURS.length];
-    const d = s.points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.score).toFixed(1)}`).join(' ');
-    const dots = s.points.map((p, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.score).toFixed(1)}" r="2.2" fill="${c}"/>`).join('');
-    return `<path d="${d}" fill="none" stroke="${c}" stroke-width="2"
+  const ticks = model.ticks.map((t) => `<text x="${t.x.toFixed(1)}" y="${AXIS_Y + 19}"
+        text-anchor="middle" fill="#8b949e" font-size="10">${esc(t.label)}</text>`).join('');
+
+  const lines = model.series.filter((s) => !s.hidden && s.points.length).map((s) => {
+    const d = s.points.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const dots = s.points.map((p) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.2" fill="${s.colour}"/>`).join('');
+    // A single reading is a dot with no path; the dot above carries it.
+    return `<path d="${d}" fill="none" stroke="${s.colour}" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
   }).join('');
 
-  const legend = composite.map((s, n) => `<span><i style="background:${SERIES_COLOURS[n % SERIES_COLOURS.length]}"></i>${esc(displayName(s.key))}</span>`).join('');
+  // The legend is the filter. Each entry is a button that toggles its system;
+  // a hidden one stays, greyed, so it can be clicked back on.
+  const legend = model.series.map((s) => `<button type="button" class="wt-legend-btn${s.hidden ? ' wt-off' : ''}"
+        data-key="${esc(s.key)}" aria-pressed="${!s.hidden}">
+        <i style="background:${s.colour}"></i>${esc(displayName(s.key))}</button>`).join('');
 
   return `<div class="wt-chart-box">
       <div class="wt-chart-title">Composite score</div>
+      ${controls}
       <svg class="wt-chart" viewBox="0 0 ${CHART_W} ${CHART_H}" width="100%" height="${CHART_H}"
-           role="img" aria-label="Sample composite score per system over time">
-        ${grid}${bands}${dateTicks(dates, x)}${lines}
+           role="img" aria-label="Composite score per system over time">
+        ${grid}${bands}${ticks}${lines}
       </svg>
       <div class="wt-chart-legend">${legend}</div>
     </div>`;
@@ -640,7 +706,7 @@ function issuesChart(sample) {
         text-anchor="middle" fill="#8b949e" font-size="10">${esc(fmtShortDate(issues[i].date))}</text>`).join('');
 
   return `<div class="wt-chart-box">
-      <div class="wt-chart-title">Issues</div>
+      <div class="wt-chart-title">Issues <span class="wt-sample">Sample data</span></div>
       <svg class="wt-chart" viewBox="0 0 ${CHART_W} ${CHART_H}" width="100%" height="${CHART_H}"
            role="img" aria-label="Sample total, new and resolved issues per scan">
         ${grid}${bars}${lines}${dateLabels}
@@ -650,34 +716,47 @@ function issuesChart(sample) {
         <span><i style="background:${COLOURS.red}"></i>New issues</span>
         <span><i style="background:${COLOURS.green}"></i>Resolved issues</span>
       </div>
+      <p class="wt-sample-note">
+        Illustrative. Resolved and introduced counts are not retained yet, so
+        they cannot be computed for any past date.
+      </p>
     </div>`;
 }
 
-const WINDOW_ORDER = ['week', 'month', 'quarter'];
-let activeWindow = 'month';
+// The composite trend's view state, global across org tabs and mirrored in the
+// URL so a view can be linked to and survives a reload. `activeRange` is
+// '7d' | '30d' | '90d' or a { from, to } custom window; `hiddenSet` is the
+// systems toggled off via the legend.
+let activeRange = '30d';
+let hiddenSet = new Set();
 
-function trendSection(org, keys, benchmark, endIso) {
+function trendSection(org, keys, benchmark, history) {
+  const floor = history.since || '2026-08-27';
+  const latestIso = latestReading(history) || benchmark.last_updated;
+  const model = CompositeTrend.buildTrendModel(history, {
+    keys,
+    range: activeRange,
+    hidden: [...hiddenSet],
+    floor,
+    box: {
+      left: CHART_LEFT, right: CHART_RIGHT, top: PLOT_TOP, bottom: PLOT_BOTTOM,
+    },
+    bands: [{ value: RED_MAX, colour: COLOURS.red }, { value: AMBER_MAX, colour: COLOURS.amber }],
+    tickCount: 5,
+  });
+
+  // The Issues chart stays illustrative and is marked so — resolved/introduced
+  // counts are not retained, so there is no real series to draw (#91). It keeps
+  // a fixed sample window; the range controls belong to the composite.
   const systems = keys.map((k) => ({ key: k, score: benchmark.systems[k].score }));
-  const sample = SampleTrends.sampleFor(systems, activeWindow, endIso);
-
-  const chips = WINDOW_ORDER.map((w) => `<button class="wt-chip" type="button" data-window="${w}"
-          aria-pressed="${w === activeWindow}">${SampleTrends.WINDOWS[w].label}</button>`).join('');
+  const sample = SampleTrends.sampleFor(systems, 'month', latestIso);
 
   return `<section class="wt-trend">
       <div class="wt-trend-head">
         <div class="section-label">Trends</div>
-        <span class="wt-sample">Sample data</span>
-        <div class="wt-chips" data-org="${esc(org)}">${chips}</div>
       </div>
-      <p class="wt-sample-note">
-        Both charts below are drawn from invented numbers. Composite: only each
-        line's final point is real — the path to it is made up, because the true
-        series is flat for almost every system and cannot show whether the chart
-        works. Issues: entirely invented, because resolved and introduced counts
-        are not retained yet and cannot be computed for any past date.
-      </p>
       <div class="wt-charts">
-        ${compositeChart(sample)}
+        ${compositeChart(model, floor, latestIso)}
         ${issuesChart(sample)}
       </div>
     </section>`;
@@ -730,10 +809,6 @@ function render(benchmark, history) {
   }
 
   const orgs = orgsOf(benchmark);
-  // The trend windows end at the most recent real reading, not at today. Ending
-  // "now" would draw a fortnight of flat line past the last scan and read as
-  // stability rather than as silence.
-  const endIso = latestReading(history) || benchmark.last_updated;
 
   // No counts on the tabs. A count beside an organisation's name told the
   // reader how many cards they were about to see, which they are about to see.
@@ -753,25 +828,80 @@ function render(benchmark, history) {
           ${keys.map((k) => systemCard(k, benchmark.systems[k], history.systems[k])).join('')}
         </div>
         ${bandLegend()}
-        ${trendSection(org, keys, benchmark, endIso)}
+        ${trendSection(org, keys, benchmark, history)}
       </div>`;
   }).join('');
 
   wireTabs(orgs);
-  wireWindowChips(() => render(benchmark, history));
+  wireTrendControls(() => render(benchmark, history));
 }
 
-// The window chips re-render everything rather than patching the two charts in
-// place. Two charts of a dozen points cost nothing to rebuild, and the version
-// that patched them had to keep its own copy of which tab was open.
-function wireWindowChips(rerender) {
+// The trend view state lives in the URL query string, so a filtered view can be
+// linked to and survives a reload. The tab stays in the hash (wireTabs owns it);
+// these two never touch each other's part of the URL.
+function readTrendState() {
+  const q = new URLSearchParams(location.search);
+  const from = q.get('from');
+  const to = q.get('to');
+  if (from || to) {
+    activeRange = { from: from || '', to: to || '' };
+  } else {
+    const r = q.get('range');
+    activeRange = ['7d', '30d', '90d'].includes(r) ? r : '30d';
+  }
+  hiddenSet = new Set((q.get('hide') || '').split(',').filter(Boolean));
+}
+
+function writeTrendState() {
+  const q = new URLSearchParams(location.search);
+  for (const k of ['range', 'from', 'to', 'hide']) q.delete(k);
+  if (isCustom()) {
+    if (activeRange.from) q.set('from', activeRange.from);
+    if (activeRange.to) q.set('to', activeRange.to);
+  } else if (activeRange !== '30d') {
+    q.set('range', activeRange);
+  }
+  if (hiddenSet.size) q.set('hide', [...hiddenSet].join(','));
+  const qs = q.toString();
+  history.replaceState(null, '', `${location.pathname}${qs ? `?${qs}` : ''}${location.hash}`);
+}
+
+// One re-render for every control: the range chips, the custom date inputs, and
+// the legend buttons that show and hide a system. Re-rendering reads the tab
+// back out of the URL, so a control click does not throw the reader to the
+// first organisation. Cheap enough to rebuild wholesale — the version that
+// patched the charts in place had to track its own open tab.
+function wireTrendControls(rerender) {
+  const apply = () => { writeTrendState(); rerender(); };
+
   for (const chip of document.querySelectorAll('.wt-chip')) {
     chip.addEventListener('click', () => {
-      activeWindow = chip.dataset.window;
-      // Which tab is showing is held in the URL already, and re-rendering reads
-      // it back — so switching window does not throw the reader back to the
-      // first organisation.
-      rerender();
+      const r = chip.dataset.range;
+      // Custom opens with the current window as its starting bounds, so the two
+      // inputs are not empty and the chart does not blank until both are set.
+      if (r === 'custom') {
+        if (!isCustom()) activeRange = { from: '', to: '' };
+      } else {
+        activeRange = r;
+      }
+      apply();
+    });
+  }
+
+  for (const input of document.querySelectorAll('.wt-date')) {
+    input.addEventListener('change', () => {
+      if (!isCustom()) activeRange = { from: '', to: '' };
+      activeRange = { ...activeRange, [input.dataset.edge]: input.value };
+      apply();
+    });
+  }
+
+  for (const btn of document.querySelectorAll('.wt-legend-btn')) {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      if (hiddenSet.has(key)) hiddenSet.delete(key);
+      else hiddenSet.add(key);
+      apply();
     });
   }
 }
@@ -791,7 +921,9 @@ function wireTabs(orgs) {
     // scroll the panel into view and yank the page down on every tab click.
     if (pushHash) {
       const org = tab.id.replace(/^tab-/, '');
-      history.replaceState(null, '', `#${org}`);
+      // Keep the query string — the trend filters live there and must survive a
+      // tab click, the same way the tab survives a filter click.
+      history.replaceState(null, '', `${location.pathname}${location.search}#${org}`);
     }
   }
 
@@ -844,6 +976,9 @@ async function init() {
       ]),
     );
     NAMES = { orgs: (names && names.orgs) || {}, systems: (names && names.systems) || {} };
+    // The trend view (range + hidden systems) is read from the URL once, before
+    // the first render, so a shared link opens on the view it names.
+    readTrendState();
     render(benchmark, history);
     // The header carries the date now. It used to be in the footer as well,
     // which is the same fact twice on one screen.

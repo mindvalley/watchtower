@@ -95,9 +95,10 @@ test('a shared script leaks nothing into global scope but its namespace', () => 
   // The property that keeps the collision from coming back: /js/*.js may define
   // window.<Name> and nothing else. A top-level binding in one of these is what
   // breaks whichever page-level script happens to pick the same word.
-  // SampleTrends is temporary — it holds the invented numbers behind the trend
-  // charts and goes when they are real. It obeys the same rule while it is here.
-  const ALLOWED = new Set(['Loading', 'Criteria', 'SampleTrends', 'FindingsCsv', 'FindingsColumns', 'FindingsPdf']);
+  // CompositeTrend is the live composite chart's model. SampleTrends is
+  // temporary — it holds the invented numbers behind the Issues chart and goes
+  // when that series is real too. Both obey the same rule while they are here.
+  const ALLOWED = new Set(['Loading', 'Criteria', 'CompositeTrend', 'SampleTrends', 'FindingsCsv', 'FindingsColumns', 'FindingsPdf']);
   for (const file of fs.readdirSync(path.join(PUBLIC, 'js'))) {
     if (!file.endsWith('.js')) continue;
     const ctx = browserish();
