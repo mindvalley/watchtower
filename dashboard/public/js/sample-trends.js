@@ -1,29 +1,10 @@
 'use strict';
 
-// ┌───────────────────────────────────────────────────────────────────────────┐
-// │ SAMPLE DATA for the ISSUES chart only. Every number here is invented.      │
-// │                                                                           │
-// │ The composite chart went live on real scan history (composite-trend.js);  │
-// │ this now backs only the Issues chart, and it is deleted the moment that    │
-// │ series is real too. Removing it is one script tag and one file — nothing   │
-// │ else imports it, and a test asserts the page marks the chart drawn from    │
-// │ it.                                                                        │
-// └───────────────────────────────────────────────────────────────────────────┘
-//
-// WHY ISSUES IS STILL MOCKED: the real series does not exist. scan_history keeps
-// scores and audit counts, never the per-finding list, and /ingest full-replaces
-// the findings table — so resolved and introduced cannot be computed for any
-// date, past or future (#91). Everything in that chart is invented, totals too.
-//
-// WHAT IS NOT INVENTED: the shape. The fleet, the systems in each tab and the
-// dates come from the real payload. The page must not carry a list of who we
-// measure — that is what makes it separable from our data — so this cannot name
-// a system even if it wanted to, and deriving the structure keeps the mock
-// honest about how many lines a real chart will have.
-//
-// Determinism is a requirement, not a nicety: a chart that reshuffles on every
-// reload cannot be reviewed, and two people looking at it would be looking at
-// different pictures. Values are seeded off the system key.
+// Sample data for the Issues chart only — every number here is invented. The
+// composite chart is live (composite-trend.js); this goes when the Issues series
+// is real (#91). Structure (systems, dates) comes from the real payload; only
+// values are invented, and they are seeded off the system key so they are
+// deterministic across reloads. Never names a system.
 
 (function attachSampleTrends() {
 

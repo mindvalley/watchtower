@@ -1,29 +1,12 @@
 'use strict';
 
-// ┌───────────────────────────────────────────────────────────────────────────┐
-// │ The composite trend chart's MODEL. Real data, no DOM.                      │
-// │                                                                           │
-// │ This is the pure half of the chart: it takes the fleet's real scan        │
-// │ history and a view (range + which systems are hidden) and returns the      │
-// │ geometry to draw — scaled points, regular axis ticks, band guide-lines.   │
-// │ index.html owns the SVG and the wiring; everything here is unit-tested     │
-// │ against a fixture built from production scan_history, because the render   │
-// │ itself lives in an IIFE no test can reach.                                 │
-// └───────────────────────────────────────────────────────────────────────────┘
-//
-// Two properties are load-bearing and each has a test:
-//   - Points sit at their TRUE time position; the axis ticks are REGULAR,
-//     evenly-spaced dates. Real positions, standard labels.
-//   - A system keeps its colour whether shown or hidden — the colour is indexed
-//     by the system's declared position, never by visible order, so toggling one
-//     line off does not recolour the rest.
+// Pure model for the composite trend chart: real scan history + a view (range,
+// hidden systems) in, chart geometry out. index.html owns the SVG and wiring.
 
 (function attachCompositeTrend() {
 
 const DAY = 86400000;
 
-// The line palette. Owned here so the legend (in index.html) reads each series'
-// colour off the model rather than keeping a second copy that could drift.
 const SERIES_COLOURS = [
   '#58a6ff', '#bc8cff', '#39c5cf', '#f778ba', '#d9a05b',
   '#7ee787', '#ffa198', '#a5d6ff',
@@ -32,8 +15,6 @@ const SERIES_COLOURS = [
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// A date-only ISO string ("YYYY-MM-DD") as a UTC epoch. The whole chart works in
-// whole days; scan timestamps carry a time but the series is one point per day.
 function dayMs(iso) {
   return Date.parse(`${iso}T00:00:00Z`);
 }
@@ -43,21 +24,16 @@ function fmtTick(ms) {
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 }
 
-// One reading per calendar day: the LATEST. The fleet re-scans within a day (two
-// osiris rows on 2026-09-21, the 08-20/08-21 migration pair, the July onboarding
-// bursts), and a day with two dots is noise, not signal. Points arrive oldest
-// first, so the last write for a date is the latest; a final sort guarantees it.
+// Latest reading per calendar day. Points arrive oldest first, so the last
+// write per date wins; the sort restores order.
 function latestPerDay(points) {
   const byDay = new Map();
   for (const p of points) byDay.set(p.date, p);
   return [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
-// Resolve a range selector to a clamped [t0, t1] window in epoch ms.
-// `range` is '7d' | '30d' | '90d' | { from, to }. The presets end at the latest
-// real reading rather than "today", so a fleet that stopped being scanned shows
-// its last window instead of a flat tail. Everything is clamped to
-// [floor, latest]; a custom window that ends before it starts is rejected.
+// range: '7d' | '30d' | '90d' | { from, to }. Presets end at the latest reading,
+// not today. Clamped to [floor, latest]; an inverted window returns null.
 function resolveDomain(range, floorIso, latestIso) {
   const floor = dayMs(floorIso);
   const latest = dayMs(latestIso);
@@ -77,11 +53,8 @@ function resolveDomain(range, floorIso, latestIso) {
   return { t0, t1 };
 }
 
-// Regular ticks: `count` dates evenly dividing [t0, t1], as x positions with
-// labels. These are COMPUTED dates, not data dates — that is the point, so the
-// axis reads cleanly whatever the scan cadence was. A window narrower than the
-// tick count produces repeated day labels, so identical consecutive labels are
-// collapsed (keeping the first position).
+// `count` evenly-spaced ticks across [t0, t1]. Repeated labels (narrow windows)
+// are dropped.
 function regularTicks(t0, t1, xOf, count) {
   const span = Math.max(1, t1 - t0);
   const out = [];
@@ -94,16 +67,12 @@ function regularTicks(t0, t1, xOf, count) {
   return out;
 }
 
-// The whole model for one chart. `history` is the /data/history.json shape
-// ({ systems: { key: { points: [{date, score, ...}] } } }); `keys` is the
-// systems for this org tab, in declared order (which fixes the colours).
 function buildTrendModel(history, {
   keys, range = '30d', hidden = [], floor, box, bands = [], tickCount = 5,
 }) {
   const hiddenSet = new Set(hidden);
   const systems = (history && history.systems) || {};
 
-  // Deduped, floored points per system, and the latest reading anywhere.
   const perKey = {};
   let latestIso = null;
   for (const key of keys) {
@@ -123,8 +92,8 @@ function buildTrendModel(history, {
   const xOf = (ms) => box.left + ((ms - t0) / span) * plotW;
   const yOf = (v) => box.bottom - (v / 100) * (box.bottom - box.top);
 
-  // Colour indexed by DECLARED position, so a hidden system keeps its slot and
-  // the visible ones do not shuffle colour when one is toggled off.
+  // Colour is indexed by declared position, so hiding one system does not
+  // recolour the rest.
   const series = keys.map((key, i) => {
     const colour = SERIES_COLOURS[i % SERIES_COLOURS.length];
     const isHidden = hiddenSet.has(key);
@@ -137,7 +106,7 @@ function buildTrendModel(history, {
       colour,
       hidden: isHidden,
       points: isHidden ? [] : inRange.map((p) => ({
-        x: xOf(p.date === undefined ? t0 : dayMs(p.date)),
+        x: xOf(dayMs(p.date)),
         y: yOf(p.score),
         date: p.date,
         score: p.score,

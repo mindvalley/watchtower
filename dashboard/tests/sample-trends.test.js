@@ -1,16 +1,8 @@
 'use strict';
 
-// The sample data behind the ISSUES chart is invented (the composite chart is
-// live now — see composite-trend.test.js), and the danger with invented data is
-// not that it is wrong but that it stops being obviously invented. These tests
-// hold the properties that keep it honest and useful: it is deterministic, it is
-// internally consistent, and it is derived from the real fleet rather than from
-// a list of our systems.
-//
-// They also hold the property that makes it deletable: the page marks the chart
-// drawn from it, and nothing else consumes it.
-//
-// Every check was verified against a planted violation before being committed.
+// Sample data behind the Issues chart (the composite chart is live — see
+// composite-trend.test.js). Holds that it is deterministic, internally
+// consistent, derived from the real fleet, and marked/deletable.
 
 const { test } = require('node:test');
 const assert = require('node:assert');
@@ -48,9 +40,6 @@ test('nothing in the sample is random', () => {
 });
 
 test('the sample no longer produces a composite series — that chart is live', () => {
-  // The composite is drawn from real scan history now. The mock must not still
-  // be inventing a composite series that nothing draws; a leftover generator is
-  // exactly the invented-data-that-stops-looking-invented risk.
   const s = sampleFor(FLEET, 'month', '2026-08-11');
   assert.strictEqual(s.composite, undefined, 'the sample must not carry a composite series');
 });
@@ -116,22 +105,19 @@ test('the Issues chart is marked as sample data', () => {
   assert.match(s, /class="wt-sample"/, 'the sample badge must be rendered');
   assert.match(s, /Sample data/, 'the badge must say so in words, not by colour alone');
   assert.match(s, /wt-sample-note/);
-  // The composite chart is real and must NOT wear the sample marker. The badge
-  // sits in the Issues title; the composite title must be clean.
+  // The live composite chart must not wear the sample marker.
   const compTitle = s.slice(s.indexOf('Composite score'), s.indexOf('Composite score') + 60);
   assert.ok(!compTitle.includes('wt-sample'), 'the live composite chart must not be marked sample');
 });
 
 test('the invented numbers reach the Issues chart and nothing else', () => {
-  // The guard that matters. If this data ever fed a ring, an action, or the now
-  // live composite chart, the board would be publishing fiction with no marker.
   const s = overview();
   const uses = (s.match(/SampleTrends\.\w+/g) || []);
   assert.deepStrictEqual([...new Set(uses)].sort(), ['SampleTrends.sampleFor'],
     'SampleTrends must only be read for the Issues series');
   assert.strictEqual((s.match(/SampleTrends\.sampleFor\(/g) || []).length, 1,
     'the sample must be built in exactly one place — the trends section');
-  // Neither the card path nor the composite chart may see it.
+  // Neither the card path nor the composite chart may read it.
   const cardBlock = s.slice(s.indexOf('function systemCard'), s.indexOf('function fmtDate'));
   assert.ok(!cardBlock.includes('SampleTrends'), 'the card must never render invented numbers');
   const compBlock = s.slice(s.indexOf('function compositeChart'), s.indexOf('function issuesChart'));
@@ -146,8 +132,7 @@ test('removing the sample is one script tag and one file', () => {
 });
 
 test('the composite range is offered as real controls, not decoration', () => {
-  // Reads the source, so the chip VALUES live in the RANGE_CHIPS definition
-  // rather than in a rendered attribute.
+  // Reads source, so chip values live in RANGE_CHIPS, not a rendered attribute.
   const s = overview();
   assert.match(s, /data-range="/, 'chips must carry the range they select');
   for (const r of ['7d', '30d', '90d', 'custom']) {

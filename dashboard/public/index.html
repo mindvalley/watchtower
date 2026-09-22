@@ -253,8 +253,6 @@
     vertical-align: -1px;
   }
 
-  /* Range controls sit under the composite title, not out to the right the way
-     the old window chips did in the section head. */
   .wt-chart-box .wt-chips { margin: 2px 0 12px; flex-wrap: wrap; align-items: center; }
   .wt-custom { display: inline-flex; align-items: center; gap: 6px; margin-left: 2px; }
   .wt-custom-to { font-size: var(--fs-micro); color: var(--text-muted); }
@@ -269,8 +267,7 @@
     padding: 3px 6px;
     color-scheme: dark;
   }
-  /* The legend is the filter. Each entry is a real button; a hidden system is
-     dimmed and its swatch drained of colour, and stays clickable to bring back. */
+  /* Legend entries are clickable filters; hidden systems are dimmed. */
   .wt-legend-btn {
     appearance: none;
     background: none;
@@ -295,8 +292,7 @@
 <script src="/js/loading.js"></script>
 <script src="/js/criteria.js"></script>
 <script src="/js/composite-trend.js"></script>
-<!-- Invented numbers for the Issues chart, and nothing else. Delete this line
-     and the file it names once resolved/introduced counts are retained (#91). -->
+<!-- Sample data for the Issues chart only; remove with the file when #91 lands. -->
 <script src="/js/sample-trends.js"></script>
 </head>
 <body>
@@ -555,9 +551,6 @@ function fmtDate(iso) {
 // that is going public, where every dependency is something else for a stranger
 // to trust.
 
-// The per-system line colours live in composite-trend.js now, so the model and
-// the legend read the same list — a line and its legend entry cannot disagree.
-
 const CHART_W = 660;
 const CHART_LEFT = 44;
 const CHART_RIGHT = CHART_W - 44;
@@ -578,10 +571,6 @@ function fmtShortDate(iso) {
   return `${Number(d)} ${months[Number(m) - 1]}`;
 }
 
-// The range controls that sit above the composite chart. Global state, so a
-// choice made on one org tab holds when the reader switches tabs. The custom
-// inputs only appear when Custom is active, and are bounded by the served
-// window so a date outside the data cannot be typed.
 const RANGE_CHIPS = [['7d', '7 days'], ['30d', '30 days'], ['90d', '90 days'], ['custom', 'Custom']];
 
 function isCustom() {
@@ -602,8 +591,6 @@ function rangeControls(floor, latestIso) {
   return `<div class="wt-chips">${chips}${custom}</div>`;
 }
 
-// The composite chart, drawn from the real model in composite-trend.js. Points
-// sit at their true time position; the ticks are regular, evenly-spaced dates.
 function compositeChart(model, floor, latestIso) {
   const controls = rangeControls(floor, latestIso);
   const y = (v) => PLOT_BOTTOM - (v / 100) * (PLOT_BOTTOM - PLOT_TOP);
@@ -617,8 +604,6 @@ function compositeChart(model, floor, latestIso) {
       </div>`;
   }
 
-  // The band edges, so a line crossing into amber is visible as such without
-  // anyone having to read the axis.
   const bands = model.bands.map((b) => `
       <line x1="${CHART_LEFT}" y1="${b.y.toFixed(1)}" x2="${CHART_RIGHT}" y2="${b.y.toFixed(1)}"
             stroke="${b.colour}" stroke-width="1" stroke-dasharray="3 4" opacity="0.35"/>`).join('');
@@ -629,13 +614,11 @@ function compositeChart(model, floor, latestIso) {
   const lines = model.series.filter((s) => !s.hidden && s.points.length).map((s) => {
     const d = s.points.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
     const dots = s.points.map((p) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.2" fill="${s.colour}"/>`).join('');
-    // A single reading is a dot with no path; the dot above carries it.
     return `<path d="${d}" fill="none" stroke="${s.colour}" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
   }).join('');
 
-  // The legend is the filter. Each entry is a button that toggles its system;
-  // a hidden one stays, greyed, so it can be clicked back on.
+  // Each legend entry toggles its system; hidden ones stay, greyed.
   const legend = model.series.map((s) => `<button type="button" class="wt-legend-btn${s.hidden ? ' wt-off' : ''}"
         data-key="${esc(s.key)}" aria-pressed="${!s.hidden}">
         <i style="background:${s.colour}"></i>${esc(displayName(s.key))}</button>`).join('');
@@ -723,10 +706,8 @@ function issuesChart(sample) {
     </div>`;
 }
 
-// The composite trend's view state, global across org tabs and mirrored in the
-// URL so a view can be linked to and survives a reload. `activeRange` is
-// '7d' | '30d' | '90d' or a { from, to } custom window; `hiddenSet` is the
-// systems toggled off via the legend.
+// Composite view state, global across tabs and mirrored in the URL.
+// activeRange: '7d' | '30d' | '90d' | { from, to }.
 let activeRange = '30d';
 let hiddenSet = new Set();
 
@@ -745,9 +726,7 @@ function trendSection(org, keys, benchmark, history) {
     tickCount: 5,
   });
 
-  // The Issues chart stays illustrative and is marked so — resolved/introduced
-  // counts are not retained, so there is no real series to draw (#91). It keeps
-  // a fixed sample window; the range controls belong to the composite.
+  // Issues stays illustrative (#91); the range controls belong to the composite.
   const systems = keys.map((k) => ({ key: k, score: benchmark.systems[k].score }));
   const sample = SampleTrends.sampleFor(systems, 'month', latestIso);
 
@@ -836,9 +815,7 @@ function render(benchmark, history) {
   wireTrendControls(() => render(benchmark, history));
 }
 
-// The trend view state lives in the URL query string, so a filtered view can be
-// linked to and survives a reload. The tab stays in the hash (wireTabs owns it);
-// these two never touch each other's part of the URL.
+// Filters live in the query string; the tab lives in the hash (wireTabs).
 function readTrendState() {
   const q = new URLSearchParams(location.search);
   const from = q.get('from');
@@ -866,19 +843,12 @@ function writeTrendState() {
   history.replaceState(null, '', `${location.pathname}${qs ? `?${qs}` : ''}${location.hash}`);
 }
 
-// One re-render for every control: the range chips, the custom date inputs, and
-// the legend buttons that show and hide a system. Re-rendering reads the tab
-// back out of the URL, so a control click does not throw the reader to the
-// first organisation. Cheap enough to rebuild wholesale — the version that
-// patched the charts in place had to track its own open tab.
 function wireTrendControls(rerender) {
   const apply = () => { writeTrendState(); rerender(); };
 
   for (const chip of document.querySelectorAll('.wt-chip')) {
     chip.addEventListener('click', () => {
       const r = chip.dataset.range;
-      // Custom opens with the current window as its starting bounds, so the two
-      // inputs are not empty and the chart does not blank until both are set.
       if (r === 'custom') {
         if (!isCustom()) activeRange = { from: '', to: '' };
       } else {
@@ -921,8 +891,7 @@ function wireTabs(orgs) {
     // scroll the panel into view and yank the page down on every tab click.
     if (pushHash) {
       const org = tab.id.replace(/^tab-/, '');
-      // Keep the query string — the trend filters live there and must survive a
-      // tab click, the same way the tab survives a filter click.
+      // Keep the query string (the trend filters live there).
       history.replaceState(null, '', `${location.pathname}${location.search}#${org}`);
     }
   }
@@ -976,8 +945,6 @@ async function init() {
       ]),
     );
     NAMES = { orgs: (names && names.orgs) || {}, systems: (names && names.systems) || {} };
-    // The trend view (range + hidden systems) is read from the URL once, before
-    // the first render, so a shared link opens on the view it names.
     readTrendState();
     render(benchmark, history);
     // The header carries the date now. It used to be in the footer as well,

@@ -220,10 +220,7 @@ test('the start date hides early noise without deleting it', { skip }, async () 
   const pool = await fresh();
   try {
     await upsertAll(pool, { systems: [SYS()], criteria: [], findings: [] });
-    // Spanning the default cutoff of 2026-08-27 — the day the composite became
-    // the /100 number the board shows. The earlier entries mislead: a benchmark
-    // still growing its criteria and correcting its scanner, then re-ruled to a
-    // new scale. They are noise in a chart, not wrong data.
+    // Spanning the default cutoff of 2026-08-27; earlier entries are hidden.
     await backfillScanHistory(pool, [
       ['2026-07-01', 5.0], ['2026-08-10', 2.7], ['2026-08-27', 2.6], ['2026-09-03', 2.6],
     ].map(([d, score]) => ({

@@ -230,32 +230,11 @@ async function replaceSystem(pool, { system, criteria = [], findings = [], publi
   }
 }
 
-// Where the history becomes comparable with itself, and therefore where a chart
-// should start. Everything earlier is still stored — this hides noise, it does
-// not delete evidence, the same shape as an allowance.
-//
-// 2026-08-27 is the day the composite became the single number out of 100 that
-// the board actually shows. Two discontinuities sit behind the date, and the
-// floor is the LATER of them:
-//
-//   - Comparability. By early August the criteria had stopped being added (C1
-//     went live on all eleven on 30 July) and the corrected complexity scanner
-//     had converged across the fleet. Before that a rising score often just
-//     meant another criterion arriving or a ruler being fixed — a line from
-//     1 July mixes coverage growth and scanner corrections in with real
-//     movement, and one system read 5.0 in July and 2.6 in August almost
-//     entirely for those reasons.
-//   - Presentation. On 27 August the composite was re-ruled to `round(mean × 20
-//     × cap)` out of 100 with the bands rescaled. A line crossing that day
-//     mixes a change in how the number is computed and shown with a change in
-//     the system itself, which is exactly what a trend must not do.
-//
-// So the chart starts on 27 August: the first date every point is the same kind
-// of number, measured the same way and shown the same way. This is our
-// instance's start; a different deployment sets its own via the env var, and the
-// per-system reference-date mechanism (with reasons) is the general form of it.
-//
-// Override with WATCHTOWER_HISTORY_START; set it empty to show everything.
+// Where the history becomes comparable, and where a chart should start. Earlier
+// rows are hidden, not deleted. 2026-08-27 is when the composite became the /100
+// number the board shows; before that, coverage was still growing and the score
+// was ruled differently, so those readings are not comparable. Instance-specific
+// — a deployment sets its own via the env var; set empty to show everything.
 const HISTORY_START = process.env.WATCHTOWER_HISTORY_START ?? '2026-08-27';
 
 // One system's scan history, oldest first — the shape a trend line reads.
