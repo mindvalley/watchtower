@@ -33,6 +33,32 @@ test('readings are grouped per system and left in the order the query returned',
   assert.strictEqual(out.since, '2026-08-03', 'the window is echoed back so the page need not hardcode it');
 });
 
+test('each point carries the scan action count as the issues series', () => {
+  // The issues trend is the total remedial actions a scan emitted; the query
+  // returns it as action_count and the projection carries it as `actions`,
+  // beside the score, off the same row.
+  const out = rowsToHistory([
+    row('alpha', '2026-08-27', 60, { action_count: 8 }),
+    row('alpha', '2026-09-03', 66, { action_count: 5 }),
+  ], { since: '2026-08-27' });
+
+  assert.deepStrictEqual(out.systems.alpha.points.map((p) => p.actions), [8, 5]);
+});
+
+test('a string action count from the database is carried as a number', () => {
+  // pg returns SUM() as a string; the chart's numeric guard would skip a string
+  // and collapse the y-axis, so the projection coerces it here.
+  const out = rowsToHistory([row('alpha', '2026-08-27', 60, { action_count: '8' })], { since: '2026-08-27' });
+  assert.strictEqual(out.systems.alpha.points[0].actions, 8);
+});
+
+test('a row with no action count carries null actions, not zero', () => {
+  // Same reasoning as an unscored reading: absent is not the same as none, and a
+  // fabricated 0 would draw a point on the issues line that no scan produced.
+  const out = rowsToHistory([row('alpha', '2026-08-27', 60)], { since: '2026-08-27' });
+  assert.strictEqual(out.systems.alpha.points[0].actions, null);
+});
+
 test('movement compares the latest against a week back, and survives floating point', () => {
   // Latest 21 Aug, a week back is 14 Aug, so the baseline is 11 Aug — not 3 Aug.
   const out = rowsToHistory([
@@ -94,20 +120,25 @@ test('one scored reading among unscored ones is still not a movement', () => {
   assert.strictEqual(out.systems.alpha.movement, null);
 });
 
-test('the fleet query does not read the stored criterion map', async () => {
+test('the fleet query never ships the stored criterion map, only a count off it', async () => {
   // `criteria` is the whole scorecard per reading — ~118kB a generation across
-  // the fleet — and a trend line needs none of it. Reading a column to throw it
-  // away is the mistake the overview already made once, pulling 2.7MB of
-  // findings JSONB and discarding all of it.
-  //
-  // This asserts the SQL because the cost is invisible to behaviour: selecting
-  // the column changes nothing a caller can observe except the bytes moved.
+  // the fleet — and a trend line needs none of it as a column. The issues count
+  // reads it, but server-side, aggregated to one integer; the map itself never
+  // travels. So the rule is not "never name h.criteria" but "name it only inside
+  // the count aggregate" — pulling it as a selected column is the fetchAll
+  // mistake, aggregating it is not.
   const sql = [];
   await fetchHistoryRows({ query: async (t) => { sql.push(t); return { rows: [] }; } });
   const q = sql.join('\n');
 
   assert.ok(/FROM scan_history/i.test(q), 'expected the history table');
-  assert.ok(!/\bh\.criteria\b/i.test(q), 'the trend must not pull the stored criterion map');
+  assert.ok(/action_count/i.test(q), 'the trend carries a computed action count');
+  assert.ok(/jsonb_array_length/i.test(q), 'the count is aggregated in SQL, not shipped and counted here');
+
+  const bareMap = (q.match(/h\.criteria/gi) || []).length;
+  const inAggregate = (q.match(/jsonb_each\(\(h\.criteria/gi) || []).length;
+  assert.strictEqual(bareMap, inAggregate,
+    'h.criteria may appear only inside the count aggregate, never as a selected column');
 });
 
 test('the fleet query orders by system and by a tie-broken time', async () => {

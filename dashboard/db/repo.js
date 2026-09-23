@@ -280,11 +280,18 @@ async function fetchScanHistory(pool, systemKey, { since = HISTORY_START } = {})
 //
 // Ordering and `since` follow the single-system reader, sharing HISTORY_START
 // so the two cannot drift into disagreeing about where the trend begins.
+// `action_count` is the issues trend: total remedial actions across the row's
+// criteria. Aggregated in SQL so only the integer travels — the stored map
+// (~118kB a generation) stays in the database, the same discipline that keeps
+// `criteria` out of the columns above. It reads the map server-side, returns
+// none of it.
 async function fetchHistoryRows(pool, { since = HISTORY_START } = {}) {
   const { rows } = await pool.query(
     `SELECT s.system_key,
             to_char(h.scanned_at, 'YYYY-MM-DD') AS scanned_at,
-            h.score, h.colour, h.hard_capped
+            h.score, h.colour, h.hard_capped,
+            COALESCE((SELECT SUM(jsonb_array_length(COALESCE(c.value->'actions', '[]'::jsonb)))
+                      FROM jsonb_each((h.criteria)::jsonb) c), 0)::int AS action_count
      FROM scan_history h JOIN systems s ON s.id = h.system_id
      WHERE ($1::date IS NULL OR h.scanned_at >= $1::date)
      ORDER BY s.system_key ASC, h.recorded_at ASC, h.id ASC`,

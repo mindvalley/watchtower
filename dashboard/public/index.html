@@ -192,7 +192,7 @@
   /* ── Trends ── */
   .wt-trend { margin-top: 34px; border-top: 1px solid var(--border-soft); padding-top: 22px; }
   .wt-trend-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; flex-wrap: wrap; }
-  .wt-chips { margin-left: auto; display: flex; gap: 6px; }
+  .wt-chips { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .wt-chip {
     appearance: none;
     background: none;
@@ -209,26 +209,6 @@
     color: var(--text);
     border-color: var(--accent);
     background: rgba(88, 166, 255, 0.07);
-  }
-
-  /* The sample marker. Amber and bordered rather than muted grey: a placeholder
-     chart that cannot be told apart from a real one is worse than no chart, and
-     this dashboard is read by people who will not know which half is which. */
-  .wt-sample {
-    font-size: var(--fs-micro);
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--amber);
-    border: 1px solid var(--amber);
-    border-radius: var(--radius-sm);
-    padding: 1px 7px;
-  }
-  .wt-sample-note {
-    font-size: var(--fs-xs);
-    color: var(--text-muted);
-    margin: 0 0 18px;
-    max-width: 92ch;
   }
 
   .wt-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
@@ -253,7 +233,8 @@
     vertical-align: -1px;
   }
 
-  .wt-chart-box .wt-chips { margin: 2px 0 12px; flex-wrap: wrap; align-items: center; }
+  /* One legend below both charts, spanning the grid. */
+  .wt-trend-legend { margin-top: 16px; }
   .wt-custom { display: inline-flex; align-items: center; gap: 6px; margin-left: 2px; }
   .wt-custom-to { font-size: var(--fs-micro); color: var(--text-muted); }
   .wt-date {
@@ -292,8 +273,6 @@
 <script src="/js/loading.js"></script>
 <script src="/js/criteria.js"></script>
 <script src="/js/composite-trend.js"></script>
-<!-- Sample data for the Issues chart only; remove with the file when #91 lands. -->
-<script src="/js/sample-trends.js"></script>
 </head>
 <body>
 <div class="page">
@@ -343,10 +322,8 @@
 (function overview() {
 'use strict';
 
-// blue is not a band — it is the neutral series colour on the issues chart,
-// where "total" is a quantity rather than a judgement.
 const COLOURS = {
-  green: '#3fb950', amber: '#d29922', red: '#f85149', blue: '#58a6ff',
+  green: '#3fb950', amber: '#d29922', red: '#f85149',
 };
 
 function esc(v) {
@@ -565,12 +542,6 @@ function gridline(y, label, xFrom) {
       <text x="${xFrom - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end" fill="#8b949e" font-size="10">${label}</text>`;
 }
 
-function fmtShortDate(iso) {
-  const [, m, d] = iso.split('-');
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${Number(d)} ${months[Number(m) - 1]}`;
-}
-
 const RANGE_CHIPS = [['7d', '7 days'], ['30d', '30 days'], ['90d', '90 days'], ['custom', 'Custom']];
 
 function isCustom() {
@@ -591,122 +562,59 @@ function rangeControls(floor, latestIso) {
   return `<div class="wt-chips">${chips}${custom}</div>`;
 }
 
-function compositeChart(model, floor, latestIso) {
-  const controls = rangeControls(floor, latestIso);
-  const y = (v) => PLOT_BOTTOM - (v / 100) * (PLOT_BOTTOM - PLOT_TOP);
-  const grid = [0, 25, 50, 75, 100].map((v) => gridline(y(v), String(v), CHART_LEFT)).join('');
-
-  if (model.empty) {
-    return `<div class="wt-chart-box">
-        <div class="wt-chart-title">Composite score</div>
-        ${controls}
-        <div class="wt-chart-empty">No readings in this range.</div>
-      </div>`;
-  }
-
-  const bands = model.bands.map((b) => `
-      <line x1="${CHART_LEFT}" y1="${b.y.toFixed(1)}" x2="${CHART_RIGHT}" y2="${b.y.toFixed(1)}"
-            stroke="${b.colour}" stroke-width="1" stroke-dasharray="3 4" opacity="0.35"/>`).join('');
-
-  const ticks = model.ticks.map((t) => `<text x="${t.x.toFixed(1)}" y="${AXIS_Y + 19}"
-        text-anchor="middle" fill="#8b949e" font-size="10">${esc(t.label)}</text>`).join('');
-
-  const lines = model.series.filter((s) => !s.hidden && s.points.length).map((s) => {
+// Series lines (path + dots) for one model; hidden and empty series drop out.
+// Shared by both charts.
+function seriesPaths(series) {
+  return series.filter((s) => !s.hidden && s.points.length).map((s) => {
     const d = s.points.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
     const dots = s.points.map((p) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.2" fill="${s.colour}"/>`).join('');
     return `<path d="${d}" fill="none" stroke="${s.colour}" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
   }).join('');
+}
 
-  // Each legend entry toggles its system; hidden ones stay, greyed.
-  const legend = model.series.map((s) => `<button type="button" class="wt-legend-btn${s.hidden ? ' wt-off' : ''}"
-        data-key="${esc(s.key)}" aria-pressed="${!s.hidden}">
-        <i style="background:${s.colour}"></i>${esc(displayName(s.key))}</button>`).join('');
+function xTicks(ticks) {
+  return ticks.map((t) => `<text x="${t.x.toFixed(1)}" y="${AXIS_Y + 19}"
+        text-anchor="middle" fill="#8b949e" font-size="10">${esc(t.label)}</text>`).join('');
+}
 
+function chartBox(title, aria, inner) {
   return `<div class="wt-chart-box">
-      <div class="wt-chart-title">Composite score</div>
-      ${controls}
+      <div class="wt-chart-title">${title}</div>
       <svg class="wt-chart" viewBox="0 0 ${CHART_W} ${CHART_H}" width="100%" height="${CHART_H}"
-           role="img" aria-label="Composite score per system over time">
-        ${grid}${bands}${ticks}${lines}
-      </svg>
-      <div class="wt-chart-legend">${legend}</div>
+           role="img" aria-label="${aria}">${inner}</svg>
     </div>`;
 }
 
-function issuesChart(sample) {
-  const { issues } = sample;
-  if (issues.length < 2) return '';
-  const LEFT = 52;
-  const max = Math.max(...issues.map((p) => p.total)) * 1.12;
-  const y = (v) => PLOT_BOTTOM - (v / max) * (PLOT_BOTTOM - PLOT_TOP);
-  const slot = (CHART_W - LEFT - 44) / issues.length;
-  const BAR = Math.min(26, slot * 0.32);
-  // Two bars per date, side by side: the total and what was resolved.
-  const totalX = (i) => LEFT + i * slot + slot / 2 - BAR - 2;
-  const resolvedX = (i) => LEFT + i * slot + slot / 2 + 2;
-
-  const step = Math.max(1, Math.round(max / 4 / 50) * 50);
-  const grid = [0, step, step * 2, step * 3, step * 4]
-    .filter((v) => v <= max).map((v) => gridline(y(v), String(v), LEFT)).join('');
-
-  const bars = issues.map((p, i) => {
-    // The new portion sits at the TOP of the total bar, so the boundary between
-    // the two colours is literally the line the New series traces.
-    const newTop = y(p.total);
-    const newBottom = y(p.total - p.introduced);
-    return `
-      <rect x="${totalX(i).toFixed(1)}" y="${newTop.toFixed(1)}" width="${BAR.toFixed(1)}"
-            height="${Math.max(0, newBottom - newTop).toFixed(1)}" fill="${COLOURS.red}" rx="1"/>
-      <rect x="${totalX(i).toFixed(1)}" y="${newBottom.toFixed(1)}" width="${BAR.toFixed(1)}"
-            height="${Math.max(0, PLOT_BOTTOM - newBottom).toFixed(1)}" fill="${COLOURS.blue}" opacity="0.30" rx="1"/>
-      <rect x="${resolvedX(i).toFixed(1)}" y="${y(p.resolved).toFixed(1)}" width="${BAR.toFixed(1)}"
-            height="${Math.max(0, PLOT_BOTTOM - y(p.resolved)).toFixed(1)}" fill="${COLOURS.green}" rx="1"/>`;
-  }).join('');
-
-  const centreTotal = (i) => totalX(i) + BAR / 2;
-  const centreResolved = (i) => resolvedX(i) + BAR / 2;
-  const line = (pts, colour) => {
-    const d = pts.map(([px, py], i) => `${i ? 'L' : 'M'}${px.toFixed(1)},${py.toFixed(1)}`).join(' ');
-    const dots = pts.map(([px, py]) => `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="3" fill="${colour}"/>`).join('');
-    return `<path d="${d}" fill="none" stroke="${colour}" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
-  };
-
-  const lines = [
-    line(issues.map((p, i) => [centreTotal(i), y(p.total)]), COLOURS.blue),
-    // New traces the BASE of the red band, so the gap between the two lines is
-    // that scan's new issues rather than a second reading of the total.
-    line(issues.map((p, i) => [centreTotal(i), y(p.total - p.introduced)]), COLOURS.red),
-    line(issues.map((p, i) => [centreResolved(i), y(p.resolved)]), COLOURS.green),
-  ].join('');
-
-  const ticks = issues.map((p, i) => [i, p.date]);
-  const tickIdx = issues.length <= 4
-    ? ticks.map(([i]) => i)
-    : [0, Math.round((issues.length - 1) / 3), Math.round(((issues.length - 1) * 2) / 3), issues.length - 1];
-  const dateLabels = [...new Set(tickIdx)].map((i) => `<text x="${(LEFT + i * slot + slot / 2).toFixed(1)}" y="${AXIS_Y + 19}"
-        text-anchor="middle" fill="#8b949e" font-size="10">${esc(fmtShortDate(issues[i].date))}</text>`).join('');
-
+function emptyBox(title) {
   return `<div class="wt-chart-box">
-      <div class="wt-chart-title">Issues <span class="wt-sample">Sample data</span></div>
-      <svg class="wt-chart" viewBox="0 0 ${CHART_W} ${CHART_H}" width="100%" height="${CHART_H}"
-           role="img" aria-label="Sample total, new and resolved issues per scan">
-        ${grid}${bars}${lines}${dateLabels}
-      </svg>
-      <div class="wt-chart-legend">
-        <span><i style="background:${COLOURS.blue}"></i>Total issues</span>
-        <span><i style="background:${COLOURS.red}"></i>New issues</span>
-        <span><i style="background:${COLOURS.green}"></i>Resolved issues</span>
-      </div>
-      <p class="wt-sample-note">
-        Illustrative. Resolved and introduced counts are not retained yet, so
-        they cannot be computed for any past date.
-      </p>
+      <div class="wt-chart-title">${title}</div>
+      <div class="wt-chart-empty">No readings in this range.</div>
     </div>`;
 }
 
-// Composite view state, global across tabs and mirrored in the URL.
+// Composite: fixed 0-100 scale with the band lines drawn on it.
+function compositeChart(model) {
+  if (model.empty) return emptyBox('Composite score');
+  const y = (v) => PLOT_BOTTOM - (v / 100) * (PLOT_BOTTOM - PLOT_TOP);
+  const grid = [0, 25, 50, 75, 100].map((v) => gridline(y(v), String(v), CHART_LEFT)).join('');
+  const bands = model.bands.map((b) => `
+      <line x1="${CHART_LEFT}" y1="${b.y.toFixed(1)}" x2="${CHART_RIGHT}" y2="${b.y.toFixed(1)}"
+            stroke="${b.colour}" stroke-width="1" stroke-dasharray="3 4" opacity="0.35"/>`).join('');
+  return chartBox('Composite score', 'Composite score per system over time',
+    `${grid}${bands}${xTicks(model.ticks)}${seriesPaths(model.series)}`);
+}
+
+// Issues: a count on a derived axis, gridlines from the model's y-ticks. No
+// bands — a count has no good/bad line, only more or fewer.
+function issuesChart(model) {
+  if (model.empty) return emptyBox('Issues');
+  const grid = model.yTicks.map((t) => gridline(t.y, String(t.value), CHART_LEFT)).join('');
+  return chartBox('Issues', 'Open issues per system over time',
+    `${grid}${xTicks(model.ticks)}${seriesPaths(model.series)}`);
+}
+
+// Trend view state, global across tabs and mirrored in the URL.
 // activeRange: '7d' | '30d' | '90d' | { from, to }.
 let activeRange = '30d';
 let hiddenSet = new Set();
@@ -714,7 +622,7 @@ let hiddenSet = new Set();
 function trendSection(org, keys, benchmark, history) {
   const floor = history.since || '2026-08-27';
   const latestIso = latestReading(history) || benchmark.last_updated;
-  const model = CompositeTrend.buildTrendModel(history, {
+  const common = {
     keys,
     range: activeRange,
     hidden: [...hiddenSet],
@@ -722,23 +630,44 @@ function trendSection(org, keys, benchmark, history) {
     box: {
       left: CHART_LEFT, right: CHART_RIGHT, top: PLOT_TOP, bottom: PLOT_BOTTOM,
     },
-    bands: [{ value: RED_MAX, colour: COLOURS.red }, { value: AMBER_MAX, colour: COLOURS.amber }],
     tickCount: 5,
+  };
+  // Both charts read the same rows, so they carry the same points; one range and
+  // one hidden set drive both. Composite on the fixed 0-100 scale with bands;
+  // issues on an action count with a derived axis.
+  const composite = CompositeTrend.buildTrendModel(history, {
+    ...common,
+    bands: [{ value: RED_MAX, colour: COLOURS.red }, { value: AMBER_MAX, colour: COLOURS.amber }],
   });
-
-  // Issues stays illustrative (#91); the range controls belong to the composite.
-  const systems = keys.map((k) => ({ key: k, score: benchmark.systems[k].score }));
-  const sample = SampleTrends.sampleFor(systems, 'month', latestIso);
+  const issues = CompositeTrend.buildTrendModel(history, {
+    ...common, valueField: 'actions', yMax: null, yTickCount: 4,
+  });
 
   return `<section class="wt-trend">
       <div class="wt-trend-head">
         <div class="section-label">Trends</div>
+        ${rangeControls(floor, latestIso)}
       </div>
       <div class="wt-charts">
-        ${compositeChart(model, floor, latestIso)}
-        ${issuesChart(sample)}
+        ${compositeChart(composite)}
+        ${issuesChart(issues)}
       </div>
+      ${trendLegend(keys)}
     </section>`;
+}
+
+// One legend for both charts. Colour is indexed by declared position — the model
+// does the same — so the two charts and this legend agree. Clicking toggles the
+// system on both; hidden ones stay, greyed.
+function trendLegend(keys) {
+  const colours = CompositeTrend.SERIES_COLOURS;
+  const items = keys.map((key, i) => {
+    const hidden = hiddenSet.has(key);
+    return `<button type="button" class="wt-legend-btn${hidden ? ' wt-off' : ''}"
+        data-key="${esc(key)}" aria-pressed="${!hidden}">
+        <i style="background:${colours[i % colours.length]}"></i>${esc(displayName(key))}</button>`;
+  }).join('');
+  return `<div class="wt-chart-legend wt-trend-legend">${items}</div>`;
 }
 
 function bandLegend() {
