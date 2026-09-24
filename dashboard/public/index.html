@@ -233,8 +233,6 @@
     vertical-align: -1px;
   }
 
-  /* One legend below both charts, spanning the grid. */
-  .wt-trend-legend { margin-top: 16px; }
   .wt-custom { display: inline-flex; align-items: center; gap: 6px; margin-left: 2px; }
   .wt-custom-to { font-size: var(--fs-micro); color: var(--text-muted); }
   .wt-date {
@@ -576,12 +574,21 @@ function xTicks(ticks) {
         text-anchor="middle" fill="#8b949e" font-size="10">${esc(t.label)}</text>`).join('');
 }
 
-function chartBox(title, aria, inner) {
+function chartBox(title, aria, inner, legend) {
   return `<div class="wt-chart-box">
       <div class="wt-chart-title">${title}</div>
       <svg class="wt-chart" viewBox="0 0 ${CHART_W} ${CHART_H}" width="100%" height="${CHART_H}"
            role="img" aria-label="${aria}">${inner}</svg>
+      ${legend}
     </div>`;
+}
+
+// Colour indexed by declared position, matching the chart's model.
+function chartLegend(series) {
+  const items = series.map((s) => `<button type="button" class="wt-legend-btn${s.hidden ? ' wt-off' : ''}"
+        data-key="${esc(s.key)}" aria-pressed="${!s.hidden}">
+        <i style="background:${s.colour}"></i>${esc(displayName(s.key))}</button>`).join('');
+  return `<div class="wt-chart-legend">${items}</div>`;
 }
 
 function emptyBox(title) {
@@ -599,14 +606,14 @@ function compositeChart(model) {
       <line x1="${CHART_LEFT}" y1="${b.y.toFixed(1)}" x2="${CHART_RIGHT}" y2="${b.y.toFixed(1)}"
             stroke="${b.colour}" stroke-width="1" stroke-dasharray="3 4" opacity="0.35"/>`).join('');
   return chartBox('Composite score', 'Composite score per system over time',
-    `${grid}${bands}${xTicks(model.ticks)}${seriesPaths(model.series)}`);
+    `${grid}${bands}${xTicks(model.ticks)}${seriesPaths(model.series)}`, chartLegend(model.series));
 }
 
 function issuesChart(model) {
   if (model.empty) return emptyBox('Issues');
   const grid = model.yTicks.map((t) => gridline(t.y, String(t.value), CHART_LEFT)).join('');
   return chartBox('Issues', 'Open issues per system over time',
-    `${grid}${xTicks(model.ticks)}${seriesPaths(model.series)}`);
+    `${grid}${xTicks(model.ticks)}${seriesPaths(model.series)}`, chartLegend(model.series));
 }
 
 // Trend view state, global across tabs and mirrored in the URL.
@@ -644,20 +651,7 @@ function trendSection(org, keys, benchmark, history) {
         ${compositeChart(composite)}
         ${issuesChart(issues)}
       </div>
-      ${trendLegend(keys)}
     </section>`;
-}
-
-// Colour indexed by declared position, matching both charts' models.
-function trendLegend(keys) {
-  const colours = CompositeTrend.SERIES_COLOURS;
-  const items = keys.map((key, i) => {
-    const hidden = hiddenSet.has(key);
-    return `<button type="button" class="wt-legend-btn${hidden ? ' wt-off' : ''}"
-        data-key="${esc(key)}" aria-pressed="${!hidden}">
-        <i style="background:${colours[i % colours.length]}"></i>${esc(displayName(key))}</button>`;
-  }).join('');
-  return `<div class="wt-chart-legend wt-trend-legend">${items}</div>`;
 }
 
 function bandLegend() {
