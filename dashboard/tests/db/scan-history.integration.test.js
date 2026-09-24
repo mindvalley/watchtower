@@ -113,10 +113,6 @@ test('history accumulates and survives the full replace that drops criteria', { 
 });
 
 test('the fleet reader counts the actions stored across a scan\'s criteria', { skip }, async () => {
-  // The issues trend. The count is aggregated in SQL from the stored criterion
-  // map — proved here against a real publish so the jsonb path is exercised, not
-  // just the arithmetic. A criterion with no actions key contributes zero, not a
-  // NULL that would poison the sum.
   const pool = await fresh();
   try {
     await replaceSystem(pool, {

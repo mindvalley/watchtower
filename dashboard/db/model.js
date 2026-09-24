@@ -133,10 +133,7 @@ function rowsToHistory(rows, { since }) {
       score: r.score ?? null,
       colour: r.colour ?? null,
       capped: r.hard_capped ?? null,
-      // Total remedial actions the scan emitted — the issues trend. Counted in
-      // SQL (fetchHistoryRows), so the stored criterion map never ships here.
-      // Coerced to a number: pg returns a SUM as a string, and a string would
-      // be silently skipped by the chart's numeric guard, collapsing the axis.
+      // pg returns SUM as a string; coerce or the chart's numeric guard skips it.
       actions: r.action_count == null ? null : Number(r.action_count),
     });
   }
