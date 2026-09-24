@@ -1,10 +1,6 @@
 'use strict';
 
-// Pure model for the trend charts: real scan history + a view (range, hidden
-// systems) in, chart geometry out. index.html owns the SVG and wiring. The
-// composite chart plots score on a fixed 0-100 scale; the issues chart plots an
-// action count on a scale derived from the data — same skeleton, different value
-// field and y-axis.
+// Pure model for the trend charts. index.html owns the SVG and wiring.
 
 (function attachCompositeTrend() {
 
@@ -70,9 +66,8 @@ function regularTicks(t0, t1, xOf, count) {
   return out;
 }
 
-// A round axis top and integer step for a count, aiming for ~targetTicks
-// intervals. The step is a 1/2/5 multiple, floored at 1 so a count axis never
-// labels a fraction.
+// A round axis top and integer step for a count. Step floored at 1 so a count
+// axis never labels a fraction.
 function niceScale(maxValue, targetTicks) {
   const ticks = Math.max(1, targetTicks);
   if (!(maxValue > 0)) return { top: ticks, step: 1 };
@@ -83,10 +78,6 @@ function niceScale(maxValue, targetTicks) {
   return { top: Math.ceil(maxValue / step) * step, step };
 }
 
-// valueField picks which reading to plot ('score' or 'actions'). yMax fixes the
-// axis top (100 for the composite); pass null to derive a nice ceiling from the
-// data — the issues count chart. yTickCount>0 returns count gridlines for a
-// derived axis.
 function buildTrendModel(history, {
   keys, range = '30d', hidden = [], floor, box, bands = [], tickCount = 5,
   valueField = 'score', yMax = 100, yTickCount = 0,
@@ -115,9 +106,8 @@ function buildTrendModel(history, {
   const xOf = (ms) => box.left + ((ms - t0) / span) * plotW;
   const inWindow = (p) => { const t = dayMs(p.date); return t >= t0 && t <= t1; };
 
-  // Fixed scale unless yMax is null, when the top is a nice ceiling over the
-  // values in range — measured across all keys so hiding a system does not
-  // rescale the axis under the reader.
+  // Derived axis (yMax null): top measured across all keys, so hiding one does
+  // not rescale it.
   let top = yMax;
   let step = 0;
   if (top == null) {

@@ -125,11 +125,7 @@ test('latestPerDay keeps the last reading of a repeated day', () => {
   ]);
 });
 
-// ── Issues chart: same skeleton, a count value on a derived axis ──────────────
-//
-// The x-axis, range, hidden and colour behaviour are the composite's and are
-// covered above. These cover only what the issues chart adds: plotting the
-// `actions` field, and deriving the y-axis from the data.
+// ── Issues chart: a count value on a derived axis ─────────────────────────────
 
 const ISSUES_BOX = { left: 44, right: 616, top: 20, bottom: 168 };
 const issuesHistory = {
@@ -161,36 +157,30 @@ test('the issues series plots the action count, not the score', () => {
   assert.ok(!('score' in alpha.points[0]));
 });
 
-test('the issues axis is derived from the data and rounds up to a nice top', () => {
-  // Fleet max in range is beta's 17, so the axis top rounds to 20 with an
-  // integer step; a count axis never labels a fraction.
+test('the issues axis is derived from the fleet max and rounds up to a nice top', () => {
   const m = issuesModel({ keys: ['alpha', 'beta'], range: '90d' });
   assert.strictEqual(m.yMax, 20);
   assert.deepStrictEqual(m.yTicks.map((t) => t.value), [0, 5, 10, 15, 20]);
 });
 
 test('a higher count sits lower on the plot (y grows downward)', () => {
-  // Only alpha here, so the axis derives from its max of 12 -> top 15.
   const m = issuesModel({ keys: ['alpha'], range: '90d' });
   assert.strictEqual(m.yMax, 15);
   const [p8, p12, p5] = m.series.find((s) => s.key === 'alpha').points;
-  assert.ok(p12.y < p8.y, '12 is higher on the axis than 8, so a smaller y');
-  assert.ok(p5.y > p8.y, '5 is lower on the axis than 8, so a larger y');
+  assert.ok(p12.y < p8.y);
+  assert.ok(p5.y > p8.y);
   assert.strictEqual(p5.y, ISSUES_BOX.bottom - (5 / m.yMax) * (ISSUES_BOX.bottom - ISSUES_BOX.top));
 });
 
 test('the issues axis does not rescale when a system is hidden', () => {
-  // Top is measured across all keys, not just the visible ones, so hiding the
-  // system that carries the max must not move the axis under the reader.
   const shown = issuesModel({ keys: ['alpha', 'beta'], range: '90d' });
   const hidden = issuesModel({ keys: ['alpha', 'beta'], range: '90d', hidden: ['beta'] });
   assert.strictEqual(hidden.yMax, shown.yMax);
 });
 
-test('niceScale rounds a count up to a 1/2/5 step with integer ticks', () => {
+test('niceScale rounds a count up to a 1/2/5 step, floored at 1, never dividing by zero', () => {
   assert.deepStrictEqual(niceScale(17, 4), { top: 20, step: 5 });
   assert.deepStrictEqual(niceScale(8, 4), { top: 8, step: 2 });
   assert.deepStrictEqual(niceScale(3, 4), { top: 3, step: 1 });
-  // No data is a flat axis, not a divide-by-zero.
   assert.deepStrictEqual(niceScale(0, 4), { top: 4, step: 1 });
 });

@@ -562,8 +562,6 @@ function rangeControls(floor, latestIso) {
   return `<div class="wt-chips">${chips}${custom}</div>`;
 }
 
-// Series lines (path + dots) for one model; hidden and empty series drop out.
-// Shared by both charts.
 function seriesPaths(series) {
   return series.filter((s) => !s.hidden && s.points.length).map((s) => {
     const d = s.points.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
@@ -593,7 +591,6 @@ function emptyBox(title) {
     </div>`;
 }
 
-// Composite: fixed 0-100 scale with the band lines drawn on it.
 function compositeChart(model) {
   if (model.empty) return emptyBox('Composite score');
   const y = (v) => PLOT_BOTTOM - (v / 100) * (PLOT_BOTTOM - PLOT_TOP);
@@ -605,8 +602,6 @@ function compositeChart(model) {
     `${grid}${bands}${xTicks(model.ticks)}${seriesPaths(model.series)}`);
 }
 
-// Issues: a count on a derived axis, gridlines from the model's y-ticks. No
-// bands — a count has no good/bad line, only more or fewer.
 function issuesChart(model) {
   if (model.empty) return emptyBox('Issues');
   const grid = model.yTicks.map((t) => gridline(t.y, String(t.value), CHART_LEFT)).join('');
@@ -632,9 +627,6 @@ function trendSection(org, keys, benchmark, history) {
     },
     tickCount: 5,
   };
-  // Both charts read the same rows, so they carry the same points; one range and
-  // one hidden set drive both. Composite on the fixed 0-100 scale with bands;
-  // issues on an action count with a derived axis.
   const composite = CompositeTrend.buildTrendModel(history, {
     ...common,
     bands: [{ value: RED_MAX, colour: COLOURS.red }, { value: AMBER_MAX, colour: COLOURS.amber }],
@@ -656,9 +648,7 @@ function trendSection(org, keys, benchmark, history) {
     </section>`;
 }
 
-// One legend for both charts. Colour is indexed by declared position — the model
-// does the same — so the two charts and this legend agree. Clicking toggles the
-// system on both; hidden ones stay, greyed.
+// Colour indexed by declared position, matching both charts' models.
 function trendLegend(keys) {
   const colours = CompositeTrend.SERIES_COLOURS;
   const items = keys.map((key, i) => {

@@ -34,9 +34,6 @@ test('readings are grouped per system and left in the order the query returned',
 });
 
 test('each point carries the scan action count as the issues series', () => {
-  // The issues trend is the total remedial actions a scan emitted; the query
-  // returns it as action_count and the projection carries it as `actions`,
-  // beside the score, off the same row.
   const out = rowsToHistory([
     row('alpha', '2026-08-27', 60, { action_count: 8 }),
     row('alpha', '2026-09-03', 66, { action_count: 5 }),
@@ -46,15 +43,11 @@ test('each point carries the scan action count as the issues series', () => {
 });
 
 test('a string action count from the database is carried as a number', () => {
-  // pg returns SUM() as a string; the chart's numeric guard would skip a string
-  // and collapse the y-axis, so the projection coerces it here.
   const out = rowsToHistory([row('alpha', '2026-08-27', 60, { action_count: '8' })], { since: '2026-08-27' });
   assert.strictEqual(out.systems.alpha.points[0].actions, 8);
 });
 
 test('a row with no action count carries null actions, not zero', () => {
-  // Same reasoning as an unscored reading: absent is not the same as none, and a
-  // fabricated 0 would draw a point on the issues line that no scan produced.
   const out = rowsToHistory([row('alpha', '2026-08-27', 60)], { since: '2026-08-27' });
   assert.strictEqual(out.systems.alpha.points[0].actions, null);
 });
@@ -121,12 +114,8 @@ test('one scored reading among unscored ones is still not a movement', () => {
 });
 
 test('the fleet query never ships the stored criterion map, only a count off it', async () => {
-  // `criteria` is the whole scorecard per reading — ~118kB a generation across
-  // the fleet — and a trend line needs none of it as a column. The issues count
-  // reads it, but server-side, aggregated to one integer; the map itself never
-  // travels. So the rule is not "never name h.criteria" but "name it only inside
-  // the count aggregate" — pulling it as a selected column is the fetchAll
-  // mistake, aggregating it is not.
+  // h.criteria may be read inside the count aggregate but never selected as a
+  // column — selecting it is the fetchAll mistake, aggregating it is not.
   const sql = [];
   await fetchHistoryRows({ query: async (t) => { sql.push(t); return { rows: [] }; } });
   const q = sql.join('\n');
