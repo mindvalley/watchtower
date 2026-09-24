@@ -95,7 +95,7 @@ test('a shared script leaks nothing into global scope but its namespace', () => 
   // The property that keeps the collision from coming back: /js/*.js may define
   // window.<Name> and nothing else. A top-level binding in one of these is what
   // breaks whichever page-level script happens to pick the same word.
-  const ALLOWED = new Set(['Loading', 'Criteria', 'CompositeTrend', 'SampleTrends', 'FindingsCsv', 'FindingsColumns', 'FindingsPdf']);
+  const ALLOWED = new Set(['Loading', 'Criteria', 'CompositeTrend', 'FindingsCsv', 'FindingsColumns', 'FindingsPdf']);
   for (const file of fs.readdirSync(path.join(PUBLIC, 'js'))) {
     if (!file.endsWith('.js')) continue;
     const ctx = browserish();

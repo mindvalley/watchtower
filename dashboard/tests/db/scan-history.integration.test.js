@@ -112,6 +112,32 @@ test('history accumulates and survives the full replace that drops criteria', { 
   }
 });
 
+test('the fleet reader counts the actions stored across a scan\'s criteria', { skip }, async () => {
+  // The issues trend. The count is aggregated in SQL from the stored criterion
+  // map — proved here against a real publish so the jsonb path is exercised, not
+  // just the arithmetic. A criterion with no actions key contributes zero, not a
+  // NULL that would poison the sum.
+  const pool = await fresh();
+  try {
+    await replaceSystem(pool, {
+      system: SYS(),
+      criteria: [
+        { criterion_id: '9', payload: { score: 0, actions: ['remove secret', 'upgrade deps', 'triage sast'] }, scanned_at: '2026-08-27' },
+        { criterion_id: '8', payload: { score: 2, actions: ['refactor', 'dedupe'] }, scanned_at: '2026-08-27' },
+        { criterion_id: '2', payload: { score: 4 }, scanned_at: '2026-08-27' },
+      ],
+      findings: [],
+    });
+
+    const rows = await fetchHistoryRows(pool, { since: null });
+    const alpha = rows.filter((r) => r.system_key === 'alpha');
+    assert.strictEqual(alpha.length, 1);
+    assert.strictEqual(Number(alpha[0].action_count), 5, '3 + 2 + 0 across the criteria');
+  } finally {
+    await pool.end();
+  }
+});
+
 test('two scans on the same day are recorded separately', { skip }, async () => {
   const pool = await fresh();
   try {
