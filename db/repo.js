@@ -280,11 +280,8 @@ async function fetchScanHistory(pool, systemKey, { since = HISTORY_START } = {})
 //
 // Ordering and `since` follow the single-system reader, sharing HISTORY_START
 // so the two cannot drift into disagreeing about where the trend begins.
-// `action_count` is the issues trend: total remedial actions across the row's
-// criteria. Aggregated in SQL so only the integer travels — the stored map
-// (~118kB a generation) stays in the database, the same discipline that keeps
-// `criteria` out of the columns above. It reads the map server-side, returns
-// none of it.
+// `action_count` sums the row's actions in SQL, so only the integer travels and
+// the stored criterion map stays in the database — as with `criteria` above.
 async function fetchHistoryRows(pool, { since = HISTORY_START } = {}) {
   const { rows } = await pool.query(
     `SELECT s.system_key,
