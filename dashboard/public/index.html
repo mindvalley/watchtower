@@ -214,7 +214,8 @@
   .wt-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
   @media (max-width: 900px) { .wt-charts { grid-template-columns: 1fr; } }
   .wt-chart-box { min-width: 0; }
-  .wt-chart-title { font-size: var(--fs-xs); font-weight: 600; margin-bottom: 8px; }
+  .wt-chart-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+  .wt-chart-title { font-size: var(--fs-xs); font-weight: 600; }
   .wt-chart { display: block; overflow: visible; }
   .wt-chart-legend {
     display: flex;
@@ -542,20 +543,21 @@ function gridline(y, label, xFrom) {
 
 const RANGE_CHIPS = [['7d', '7 days'], ['30d', '30 days'], ['90d', '90 days'], ['custom', 'Custom']];
 
-function isCustom() {
-  return activeRange && typeof activeRange === 'object';
+function isCustom(range) {
+  return range && typeof range === 'object';
 }
 
-function rangeControls(floor, latestIso) {
-  const active = isCustom() ? 'custom' : activeRange;
+function rangeControls(chart, floor, latestIso) {
+  const range = rangeBy[chart];
+  const active = isCustom(range) ? 'custom' : range;
   const chips = RANGE_CHIPS.map(([v, label]) => `<button class="wt-chip" type="button"
-          data-range="${v}" aria-pressed="${v === active}">${label}</button>`).join('');
-  const custom = isCustom() ? `<span class="wt-custom">
-        <input type="date" class="wt-date" data-edge="from" min="${floor}" max="${latestIso}"
-               value="${esc(activeRange.from || '')}" aria-label="From date">
+          data-chart="${chart}" data-range="${v}" aria-pressed="${v === active}">${label}</button>`).join('');
+  const custom = isCustom(range) ? `<span class="wt-custom">
+        <input type="date" class="wt-date" data-chart="${chart}" data-edge="from" min="${floor}" max="${latestIso}"
+               value="${esc(range.from || '')}" aria-label="From date">
         <span class="wt-custom-to">to</span>
-        <input type="date" class="wt-date" data-edge="to" min="${floor}" max="${latestIso}"
-               value="${esc(activeRange.to || '')}" aria-label="To date">
+        <input type="date" class="wt-date" data-chart="${chart}" data-edge="to" min="${floor}" max="${latestIso}"
+               value="${esc(range.to || '')}" aria-label="To date">
       </span>` : '';
   return `<div class="wt-chips">${chips}${custom}</div>`;
 }
@@ -574,9 +576,12 @@ function xTicks(ticks) {
         text-anchor="middle" fill="#8b949e" font-size="10">${esc(t.label)}</text>`).join('');
 }
 
-function chartBox(title, aria, inner, legend) {
+function chartBox(title, aria, inner, legend, controls) {
   return `<div class="wt-chart-box">
-      <div class="wt-chart-title">${title}</div>
+      <div class="wt-chart-head">
+        <div class="wt-chart-title">${title}</div>
+        ${controls || ''}
+      </div>
       <svg class="wt-chart" viewBox="0 0 ${CHART_W} ${CHART_H}" width="100%" height="${CHART_H}"
            role="img" aria-label="${aria}">${inner}</svg>
       ${legend}
@@ -584,72 +589,72 @@ function chartBox(title, aria, inner, legend) {
 }
 
 // Colour indexed by declared position, matching the chart's model.
-function chartLegend(series) {
+function chartLegend(chart, series) {
   const items = series.map((s) => `<button type="button" class="wt-legend-btn${s.hidden ? ' wt-off' : ''}"
-        data-key="${esc(s.key)}" aria-pressed="${!s.hidden}">
+        data-chart="${chart}" data-key="${esc(s.key)}" aria-pressed="${!s.hidden}">
         <i style="background:${s.colour}"></i>${esc(displayName(s.key))}</button>`).join('');
   return `<div class="wt-chart-legend">${items}</div>`;
 }
 
-function emptyBox(title) {
+function emptyBox(title, controls) {
   return `<div class="wt-chart-box">
-      <div class="wt-chart-title">${title}</div>
+      <div class="wt-chart-head">
+        <div class="wt-chart-title">${title}</div>
+        ${controls || ''}
+      </div>
       <div class="wt-chart-empty">No readings in this range.</div>
     </div>`;
 }
 
-function compositeChart(model) {
-  if (model.empty) return emptyBox('Composite score');
+function compositeChart(model, controls) {
+  if (model.empty) return emptyBox('Composite score', controls);
   const y = (v) => PLOT_BOTTOM - (v / 100) * (PLOT_BOTTOM - PLOT_TOP);
   const grid = [0, 25, 50, 75, 100].map((v) => gridline(y(v), String(v), CHART_LEFT)).join('');
   const bands = model.bands.map((b) => `
       <line x1="${CHART_LEFT}" y1="${b.y.toFixed(1)}" x2="${CHART_RIGHT}" y2="${b.y.toFixed(1)}"
             stroke="${b.colour}" stroke-width="1" stroke-dasharray="3 4" opacity="0.35"/>`).join('');
   return chartBox('Composite score', 'Composite score per system over time',
-    `${grid}${bands}${xTicks(model.ticks)}${seriesPaths(model.series)}`, chartLegend(model.series));
+    `${grid}${bands}${xTicks(model.ticks)}${seriesPaths(model.series)}`,
+    chartLegend('composite', model.series), controls);
 }
 
-function issuesChart(model) {
-  if (model.empty) return emptyBox('Issues');
+function issuesChart(model, controls) {
+  if (model.empty) return emptyBox('Issues', controls);
   const grid = model.yTicks.map((t) => gridline(t.y, String(t.value), CHART_LEFT)).join('');
   return chartBox('Issues', 'Open issues per system over time',
-    `${grid}${xTicks(model.ticks)}${seriesPaths(model.series)}`, chartLegend(model.series));
+    `${grid}${xTicks(model.ticks)}${seriesPaths(model.series)}`,
+    chartLegend('issues', model.series), controls);
 }
 
-// Trend view state, global across tabs and mirrored in the URL.
-// activeRange: '7d' | '30d' | '90d' | { from, to }.
-let activeRange = '30d';
-let hiddenSet = new Set();
+// Trend view state, per chart, mirrored in the URL.
+// A range is '7d' | '30d' | '90d' | { from, to }.
+const CHART_KEYS = ['composite', 'issues'];
+const URL_PREFIX = { composite: 'c', issues: 'i' };
+const rangeBy = { composite: '30d', issues: '30d' };
+const hiddenBy = { composite: new Set(), issues: new Set() };
 
 function trendSection(org, keys, benchmark, history) {
   const floor = history.since || '2026-08-27';
   const latestIso = latestReading(history) || benchmark.last_updated;
-  const common = {
-    keys,
-    range: activeRange,
-    hidden: [...hiddenSet],
-    floor,
-    box: {
-      left: CHART_LEFT, right: CHART_RIGHT, top: PLOT_TOP, bottom: PLOT_BOTTOM,
-    },
-    tickCount: 5,
+  const box = {
+    left: CHART_LEFT, right: CHART_RIGHT, top: PLOT_TOP, bottom: PLOT_BOTTOM,
   };
   const composite = CompositeTrend.buildTrendModel(history, {
-    ...common,
+    keys, range: rangeBy.composite, hidden: [...hiddenBy.composite], floor, box, tickCount: 5,
     bands: [{ value: RED_MAX, colour: COLOURS.red }, { value: AMBER_MAX, colour: COLOURS.amber }],
   });
   const issues = CompositeTrend.buildTrendModel(history, {
-    ...common, valueField: 'actions', yMax: null, yTickCount: 4,
+    keys, range: rangeBy.issues, hidden: [...hiddenBy.issues], floor, box, tickCount: 5,
+    valueField: 'actions', yMax: null, yTickCount: 4,
   });
 
   return `<section class="wt-trend">
       <div class="wt-trend-head">
         <div class="section-label">Trends</div>
-        ${rangeControls(floor, latestIso)}
       </div>
       <div class="wt-charts">
-        ${compositeChart(composite)}
-        ${issuesChart(issues)}
+        ${compositeChart(composite, rangeControls('composite', floor, latestIso))}
+        ${issuesChart(issues, rangeControls('issues', floor, latestIso))}
       </div>
     </section>`;
 }
@@ -728,30 +733,38 @@ function render(benchmark, history) {
   wireTrendControls(() => render(benchmark, history));
 }
 
-// Filters live in the query string; the tab lives in the hash (wireTabs).
+// Filters live in the query string, prefixed per chart; the tab lives in the
+// hash (wireTabs).
 function readTrendState() {
   const q = new URLSearchParams(location.search);
-  const from = q.get('from');
-  const to = q.get('to');
-  if (from || to) {
-    activeRange = { from: from || '', to: to || '' };
-  } else {
-    const r = q.get('range');
-    activeRange = ['7d', '30d', '90d'].includes(r) ? r : '30d';
+  for (const chart of CHART_KEYS) {
+    const p = URL_PREFIX[chart];
+    const from = q.get(`${p}_from`);
+    const to = q.get(`${p}_to`);
+    if (from || to) {
+      rangeBy[chart] = { from: from || '', to: to || '' };
+    } else {
+      const r = q.get(`${p}_range`);
+      rangeBy[chart] = ['7d', '30d', '90d'].includes(r) ? r : '30d';
+    }
+    hiddenBy[chart] = new Set((q.get(`${p}_hide`) || '').split(',').filter(Boolean));
   }
-  hiddenSet = new Set((q.get('hide') || '').split(',').filter(Boolean));
 }
 
 function writeTrendState() {
   const q = new URLSearchParams(location.search);
-  for (const k of ['range', 'from', 'to', 'hide']) q.delete(k);
-  if (isCustom()) {
-    if (activeRange.from) q.set('from', activeRange.from);
-    if (activeRange.to) q.set('to', activeRange.to);
-  } else if (activeRange !== '30d') {
-    q.set('range', activeRange);
+  for (const chart of CHART_KEYS) {
+    const p = URL_PREFIX[chart];
+    for (const k of ['range', 'from', 'to', 'hide']) q.delete(`${p}_${k}`);
+    const range = rangeBy[chart];
+    if (isCustom(range)) {
+      if (range.from) q.set(`${p}_from`, range.from);
+      if (range.to) q.set(`${p}_to`, range.to);
+    } else if (range !== '30d') {
+      q.set(`${p}_range`, range);
+    }
+    if (hiddenBy[chart].size) q.set(`${p}_hide`, [...hiddenBy[chart]].join(','));
   }
-  if (hiddenSet.size) q.set('hide', [...hiddenSet].join(','));
   const qs = q.toString();
   history.replaceState(null, '', `${location.pathname}${qs ? `?${qs}` : ''}${location.hash}`);
 }
@@ -761,11 +774,12 @@ function wireTrendControls(rerender) {
 
   for (const chip of document.querySelectorAll('.wt-chip')) {
     chip.addEventListener('click', () => {
+      const chart = chip.dataset.chart;
       const r = chip.dataset.range;
       if (r === 'custom') {
-        if (!isCustom()) activeRange = { from: '', to: '' };
+        if (!isCustom(rangeBy[chart])) rangeBy[chart] = { from: '', to: '' };
       } else {
-        activeRange = r;
+        rangeBy[chart] = r;
       }
       apply();
     });
@@ -773,17 +787,20 @@ function wireTrendControls(rerender) {
 
   for (const input of document.querySelectorAll('.wt-date')) {
     input.addEventListener('change', () => {
-      if (!isCustom()) activeRange = { from: '', to: '' };
-      activeRange = { ...activeRange, [input.dataset.edge]: input.value };
+      const chart = input.dataset.chart;
+      if (!isCustom(rangeBy[chart])) rangeBy[chart] = { from: '', to: '' };
+      rangeBy[chart] = { ...rangeBy[chart], [input.dataset.edge]: input.value };
       apply();
     });
   }
 
   for (const btn of document.querySelectorAll('.wt-legend-btn')) {
     btn.addEventListener('click', () => {
+      const chart = btn.dataset.chart;
       const key = btn.dataset.key;
-      if (hiddenSet.has(key)) hiddenSet.delete(key);
-      else hiddenSet.add(key);
+      const set = hiddenBy[chart];
+      if (set.has(key)) set.delete(key);
+      else set.add(key);
       apply();
     });
   }
