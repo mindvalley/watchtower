@@ -211,12 +211,12 @@
     background: rgba(88, 166, 255, 0.07);
   }
 
-  .wt-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+  .wt-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
   @media (max-width: 900px) { .wt-charts { grid-template-columns: 1fr; } }
-  .wt-chart-box { min-width: 0; }
+  .wt-chart-box { min-width: 0; width: 90%; margin: 0 auto; }
   .wt-chart-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
   .wt-chart-title { font-size: var(--fs-xs); font-weight: 600; }
-  .wt-chart { display: block; overflow: visible; }
+  .wt-chart { display: block; overflow: visible; height: auto; }
   .wt-chart-legend {
     display: flex;
     flex-wrap: wrap;
@@ -528,20 +528,22 @@ function fmtDate(iso) {
 // to trust.
 
 const CHART_W = 660;
-const CHART_LEFT = 44;
-const CHART_RIGHT = CHART_W - 44;
-const CHART_H = 215;
-const PLOT_TOP = 20;
-const PLOT_BOTTOM = 168;
-const AXIS_Y = 190;
+// Plot spans the full cell: y-axis labels sit in a slim left gutter aligned
+// under the title, and the right edge meets the date filter.
+const CHART_LEFT = 28;
+const CHART_RIGHT = CHART_W;
+const CHART_H = 380;
+const PLOT_TOP = 24;
+const PLOT_BOTTOM = 328;
+const AXIS_Y = 348;
 
 function gridline(y, label, xFrom) {
-  return `<line x1="${xFrom}" y1="${y.toFixed(1)}" x2="${CHART_W - 44}" y2="${y.toFixed(1)}"
+  return `<line x1="${xFrom}" y1="${y.toFixed(1)}" x2="${CHART_RIGHT}" y2="${y.toFixed(1)}"
         stroke="var(--border-soft)" stroke-width="1"/>
       <text x="${xFrom - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end" fill="#8b949e" font-size="10">${label}</text>`;
 }
 
-const RANGE_CHIPS = [['7d', '7 days'], ['30d', '30 days'], ['90d', '90 days'], ['custom', 'Custom']];
+const RANGE_CHIPS = [['7d', '7d'], ['30d', '30d'], ['90d', '90d'], ['custom', 'Custom']];
 
 function isCustom(range) {
   return range && typeof range === 'object';
@@ -572,8 +574,12 @@ function seriesPaths(series) {
 }
 
 function xTicks(ticks) {
-  return ticks.map((t) => `<text x="${t.x.toFixed(1)}" y="${AXIS_Y + 19}"
-        text-anchor="middle" fill="#8b949e" font-size="10">${esc(t.label)}</text>`).join('');
+  // First/last labels anchor inward so they stay within the plot edges.
+  return ticks.map((t, i) => {
+    const anchor = i === 0 ? 'start' : i === ticks.length - 1 ? 'end' : 'middle';
+    return `<text x="${t.x.toFixed(1)}" y="${AXIS_Y + 19}"
+        text-anchor="${anchor}" fill="#8b949e" font-size="10">${esc(t.label)}</text>`;
+  }).join('');
 }
 
 function chartBox(title, aria, inner, legend, controls) {
@@ -582,7 +588,7 @@ function chartBox(title, aria, inner, legend, controls) {
         <div class="wt-chart-title">${title}</div>
         ${controls || ''}
       </div>
-      <svg class="wt-chart" viewBox="0 0 ${CHART_W} ${CHART_H}" width="100%" height="${CHART_H}"
+      <svg class="wt-chart" viewBox="0 0 ${CHART_W} ${CHART_H}" width="100%"
            role="img" aria-label="${aria}">${inner}</svg>
       ${legend}
     </div>`;
