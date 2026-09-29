@@ -23,9 +23,19 @@ Ask the user: **Do you want to bring up the dashboard to explore the scores visu
 
 If the user wants the **mock board** first ("see a sample board before scanning your own code"), run:
 
+Before running any Docker commands, verify Docker is available:
+
+```sh
+docker info
+```
+
+If `docker info` fails or Docker is not installed, stop cleanly here. The user can come back to the board step once Docker is available.
+
+If Docker is available, run:
+
 ```sh
 cd dashboard && npm ci
-docker compose -f docker-compose.example.yml up -d
+WATCHTOWER_DB_PORT=5432 docker compose -f docker-compose.example.yml up -d
 export DATABASE_URL="postgres://postgres:postgres@127.0.0.1:5432/postgres"
 npm run migrate:mock && npm start   # http://localhost:3000 — data flagged as invented
 ```
