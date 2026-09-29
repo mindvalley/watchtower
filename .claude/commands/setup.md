@@ -58,7 +58,7 @@ WATCHTOWER_DB_PORT=5432 docker compose -f docker-compose.example.yml up -d
 export DATABASE_URL="postgres://postgres:postgres@127.0.0.1:5432/postgres"
 npm run migrate
 npm run load -- ../data
-npm start   # open http://localhost:3000
+npm start   # open http://localhost:8080
 ```
 
 If the user says **stop at the numbers**, nothing more is needed. The scan output and `data/benchmark.json` are the deliverable.
