@@ -37,7 +37,7 @@ If Docker is available, run:
 cd dashboard && npm ci
 WATCHTOWER_DB_PORT=5432 docker compose -f docker-compose.example.yml up -d
 export DATABASE_URL="postgres://postgres:postgres@127.0.0.1:5432/postgres"
-npm run migrate:mock && npm start   # http://localhost:3000 — data flagged as invented
+npm run migrate:mock && npm start   # http://localhost:8080 — data flagged as invented
 ```
 
 If the user wants the **real board** (their own scan results):
