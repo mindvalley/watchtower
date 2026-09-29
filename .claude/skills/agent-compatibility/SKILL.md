@@ -1,11 +1,11 @@
 ---
 name: agent-compatibility
-description: Score a repository against the Agentic Compatibility Benchmark — install/verify the scanners, scan a folder or repo, print the numbers. No dashboard, no Docker. Runs from a clone of mindvalley/watchtower.
+description: Score a repository against the Agentic Compatibility Benchmark — install/verify the scanners, scan a folder or repo, print the numbers. No dashboard, no Docker. Runs from a clone of the watchtower repo.
 ---
 
 ## When to use / assumptions
 
-Use this skill to score any repository or local folder against the Agentic Compatibility Benchmark. Run it from the root of a `mindvalley/watchtower` clone. This skill is **self-sufficient**: it installs and verifies its own tools and does not require `/setup` to have been run first.
+Use this skill to score any repository or local folder against the Agentic Compatibility Benchmark. Run it from the root of a `watchtower` clone. This skill is **self-sufficient**: it installs and verifies its own tools and does not require `/setup` to have been run first.
 
 ---
 
