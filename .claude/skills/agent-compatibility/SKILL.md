@@ -34,7 +34,7 @@ This is the single source of truth for scanner versions. Review the output caref
 **If any tool is reported as `missing` or `mismatch`, do not scan.** A wrong version is a changed ruler: results would be incomparable across runs. Instead:
 
 1. Explain to the user which tool is missing or at the wrong version and why this matters.
-2. **Offer to install or switch to the pinned version** into a managed, non-system location. Detect the user's OS and architecture at runtime and adapt the instructions accordingly (macOS and Linux are fully supported; Windows is best-effort). Do not hard-code asset URLs or platform tables here — resolve them from what is available at the time.
+2. **Offer to install or switch to the pinned version** into a managed, non-system location. Detect the user's OS and architecture at runtime and adapt the instructions accordingly (macOS and Linux are fully supported; Windows is best-effort). Do not hard-code asset URLs or per-OS tables here — resolve them from what is available at the time.
 
    **Python-based tools — semgrep, lizard, graphifyy:**
    - Create a dedicated venv: `python3 -m venv ~/.watchtower-tools`
