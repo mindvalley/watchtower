@@ -265,6 +265,6 @@ Used in production by Mindvalley across three organisations.
   need the runtime when it is declared; replacing them with tree-sitter would
   remove it entirely.
 
-## Licence
+## License
 
 Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
