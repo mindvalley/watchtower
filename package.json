@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Scans a repository and scores it against the Agentic Compatibility Benchmark. Headless: never compiles or runs the code it measures.",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "engines": {
     "node": ">=24"
   },

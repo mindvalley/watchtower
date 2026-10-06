@@ -254,8 +254,17 @@ You can also run the files in scripts/benchmark themselves, they still work as b
 
 ## Status
 
-Used in production by Mindvalley across three organisations. Open-sourcing
-properly — setup guide, configurable triage filters — is intended but not yet
-done. The Elixir prerequisite is gone for anyone who does not declare the
-stack; the two AST helpers that need the runtime at all are still there, and
-replacing them with tree-sitter would remove it entirely.
+Used in production by Mindvalley across three organisations.
+
+- Setup: [guides/local-setup.md](guides/local-setup.md) takes a fresh clone to
+  a working board. In Claude Code, `/setup` walks through the same steps and the
+  `agent-compatibility` skill runs a scan on its own.
+- Findings judged acceptable can be marked so they stop counting against the
+  score: [guides/allowances.md](guides/allowances.md).
+- Elixir is installed only when a system declares it. Two AST helpers still
+  need the runtime when it is declared; replacing them with tree-sitter would
+  remove it entirely.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
