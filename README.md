@@ -259,3 +259,7 @@ properly — setup guide, configurable triage filters — is intended but not ye
 done. The Elixir prerequisite is gone for anyone who does not declare the
 stack; the two AST helpers that need the runtime at all are still there, and
 replacing them with tree-sitter would remove it entirely.
+
+## Licence
+
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
