@@ -73,10 +73,13 @@
     background: var(--surface);
     overflow: hidden;
     box-shadow: var(--shadow-sm);
+    cursor: pointer;
+    transition: border-color 0.15s var(--ease);
   }
+  .wt-card:hover { border-color: var(--text-muted); }
   .wt-body { padding: 15px 18px 14px; }
   .wt-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-  .wt-name { font-size: var(--fs-md); font-weight: 600; color: var(--text); }
+  .wt-name { font-size: var(--fs-md); font-weight: 600; color: var(--text); text-decoration: none; }
   .wt-stack { font-size: var(--fs-micro); color: var(--text-muted); font-family: var(--font-mono); }
   .wt-fig { display: flex; align-items: center; gap: 14px; margin-top: 12px; }
   .wt-ring { flex: none; }
@@ -481,13 +484,14 @@ function breakdown(key, s) {
 }
 
 function systemCard(key, s, entry) {
-  const name = esc(displayName(key));
+  const href = `/system/${esc(key)}`;
+  const name = `<a class="wt-name" href="${href}">${esc(displayName(key))}</a>`;
   const stack = s.stack ? `<span class="wt-stack">${esc(s.stack)}</span>` : '';
 
   if (s.score == null) {
-    return `<div class="wt-card">
+    return `<div class="wt-card" data-href="${href}">
         <div class="wt-body">
-          <div class="wt-head"><span class="wt-name">${name}</span>${stack}</div>
+          <div class="wt-head">${name}${stack}</div>
           <div class="wt-fig">
             ${dot(null)}<span class="na-text">not yet scored</span>
           </div>
@@ -500,9 +504,9 @@ function systemCard(key, s, entry) {
   }
 
   const colour = bandOf(s.score);
-  return `<div class="wt-card">
+  return `<div class="wt-card" data-href="${href}">
       <div class="wt-body">
-        <div class="wt-head"><span class="wt-name">${name}</span>${stack}</div>
+        <div class="wt-head">${name}${stack}</div>
         <div class="wt-fig">
           ${ring(s.score, colour)}
           <div>${deltaLine(entry)}</div>
@@ -812,6 +816,17 @@ function wireTrendControls(rerender) {
   }
 }
 
+// Wired once on the container, which outlives every re-render of the cards.
+function wireCardClicks() {
+  document.getElementById('org-panels').addEventListener('click', (e) => {
+    const card = e.target.closest('.wt-card[data-href]');
+    if (!card || e.target.closest('details, a')) return;
+    if (window.getSelection().toString()) return;
+    if (e.metaKey || e.ctrlKey) window.open(card.dataset.href, '_blank');
+    else location.href = card.dataset.href;
+  });
+}
+
 function wireTabs(orgs) {
   const tabs = Array.from(document.querySelectorAll('.org-tab'));
 
@@ -883,6 +898,7 @@ async function init() {
     NAMES = { orgs: (names && names.orgs) || {}, systems: (names && names.systems) || {} };
     readTrendState();
     render(benchmark, history);
+    wireCardClicks();
     // The header carries the date now. It used to be in the footer as well,
     // which is the same fact twice on one screen.
     document.getElementById('header-updated').textContent =

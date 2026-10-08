@@ -116,3 +116,16 @@ test('the mockup is not served', () => {
   assert.ok(!fs.existsSync(path.join(__dirname, '..', 'public', '_mockup.html')),
     'public/_mockup.html must not be committed');
 });
+
+test('the system name links to its page, so the card works by keyboard and in a new tab', () => {
+  const s = src();
+  assert.match(s, /const href = `\/system\/\$\{esc\(key\)\}`/);
+  assert.match(s, /<a class="wt-name" href="\$\{href\}">/);
+});
+
+test('a click anywhere on a card opens its system page, except inside the expander', () => {
+  const s = src();
+  assert.match(s, /function wireCardClicks\s*\(/);
+  assert.match(s, /closest\('details, a'\)/, 'clicks on the expander or a link must keep their own behaviour');
+  assert.match(s, /wireCardClicks\(\)/, 'the handler must be wired, not merely defined');
+});
