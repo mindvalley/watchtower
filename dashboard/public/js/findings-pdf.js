@@ -52,7 +52,7 @@ function reportGroups(data, criteriaOrder) {
     const c = criteria[key];
     const criterion = (c && c.label) || key;
     for (const g of (c && c.groups) || []) {
-      const items = ((g && g.items) || []).filter(Boolean);
+      const items = columns().orderItems(((g && g.items) || []).filter(Boolean));
       if (!items.length) continue;
       out.push({
         criterion,
