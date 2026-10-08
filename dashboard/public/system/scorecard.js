@@ -124,7 +124,7 @@ function buildAuditTrail(criterion) {
 function topFindings(group, n) {
   if (group && group.disposition === 'allowed') return [];
   const items = (group && Array.isArray(group.items)) ? group.items : [];
-  return items.slice(0, n);
+  return FINDINGS_COLUMNS.orderItems(items).slice(0, n);
 }
 
 // One-line label for an inline finding item — best-effort from common fields.

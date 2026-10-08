@@ -12,8 +12,8 @@ const REPORT_CRITERIA = [
   { key: '9', label: 'Security Posture' },
 ];
 
-// Column ordering, shared with the CSV and PDF exports.
-const { itemColumns } = (typeof require === 'function'
+// Column and row ordering, shared with the CSV and PDF exports.
+const { itemColumns, orderItems } = (typeof require === 'function'
   ? require('../js/findings-columns.js')
   : window.FindingsColumns);
 
@@ -37,7 +37,7 @@ function esc(v) {
 const DISPOSITION_NOTE = { allowed: 'allowed — not counted toward the score' };
 
 function renderGroup(g) {
-  const items = (g.items || []).filter(Boolean);
+  const items = orderItems((g.items || []).filter(Boolean));
   if (!items.length) return '';
   const allowed = g.disposition === 'allowed';
   const cols = itemColumns(items);

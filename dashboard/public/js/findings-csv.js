@@ -38,8 +38,7 @@ function flattenFindings(data, criteriaOrder) {
     const c = criteria[key];
     const label = (c && c.label) || key;
     for (const g of (c && c.groups) || []) {
-      for (const it of (g && g.items) || []) {
-        if (!it) continue;
+      for (const it of columns().orderItems(((g && g.items) || []).filter(Boolean))) {
         rows.push({
           criterion: label,
           sub_metric: g.label || g.sub || '',
