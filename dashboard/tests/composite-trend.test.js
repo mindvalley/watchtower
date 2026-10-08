@@ -103,9 +103,11 @@ test('colour is stable when a system is hidden', () => {
   }
 });
 
-test('all systems hidden reads as empty', () => {
+test('all systems hidden is not empty, so the legend stays to unhide them', () => {
   const m = model({ keys: GROUP_A, range: '90d', hidden: GROUP_A });
-  assert.strictEqual(m.empty, true);
+  assert.strictEqual(m.empty, false);
+  assert.strictEqual(m.series.length, GROUP_A.length);
+  assert.ok(m.series.every((s) => s.hidden && s.points.length === 0));
 });
 
 test('resolveDomain clamps and rejects an inverted window', () => {
