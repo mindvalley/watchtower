@@ -146,7 +146,8 @@ function buildTrendModel(history, {
   if (yTickCount > 0 && step > 0) {
     for (let v = 0; v <= top; v += step) yTicks.push({ value: v, y: yOf(v) });
   }
-  const empty = !series.some((s) => !s.hidden && s.points.length);
+  // Hidden series do not count: an all-hidden chart must keep its legend.
+  const empty = !keys.some((key) => perKey[key].some(inWindow));
   return {
     series, ticks, bands: bandLines, yTicks, yMax: top, domain, empty,
   };
