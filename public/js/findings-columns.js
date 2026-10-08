@@ -37,7 +37,23 @@ function fileName(systemKey, generatedAt, ext) {
   return `${stem}.${ext}`;
 }
 
-const api = { FIELD_ORDER, itemColumns, hasValue, cellText, fileName };
+const BUCKET_RANK = ['prod', 'dev', 'transitive'];
+const SEVERITY_RANK = ['critical', 'high', 'medium', 'low'];
+
+function rank(order, value) {
+  const i = order.indexOf(value);
+  return i === -1 ? order.length : i;
+}
+
+// Dependency CVEs: prod before dev before transitive, then critical first.
+// Findings without a bucket keep their order.
+function orderItems(items) {
+  if (!items.some((it) => it && it.bucket)) return items;
+  return [...items].sort((a, b) => (rank(BUCKET_RANK, a.bucket) - rank(BUCKET_RANK, b.bucket))
+    || (rank(SEVERITY_RANK, a.severity) - rank(SEVERITY_RANK, b.severity)));
+}
+
+const api = { FIELD_ORDER, itemColumns, hasValue, cellText, fileName, orderItems };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 if (typeof window !== 'undefined') window.FindingsColumns = api;
 
