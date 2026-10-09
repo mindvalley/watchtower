@@ -37,8 +37,9 @@ git push --force-with-lease
 - If you changed anything under `scripts/benchmark`, run `npm run build` and
   commit the updated `dist/`. CI fails when the two differ.
 
-Pull requests need an approving review and merge through a merge queue once
-the checks pass.
+Pull requests need an approving review from a code owner (listed in
+[`.github/CODEOWNERS`](.github/CODEOWNERS)) and merge through a merge queue
+once the checks pass.
 
 ## Licence
 
