@@ -16,10 +16,14 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const {
-  SKIP_DIRS, aggregateStack, detectThresholds, detectTool,
+  SKIP_DIRS, aggregateStack, aggregateStackByImports, choosePairing, detectThresholds, detectTool,
 } = require('./test-coverage-signals');
 const { classifyFile } = require('./layout-discovery');
+const { testPairingDisposition } = require('./criterion-stacks');
+const { fileDependencies } = require('./boundary-signals');
+const { pinned } = require('./scanner-pins.json');
 
 const { reportsDir, systemTarget } = require('./engine-config');
 const { materialise } = require('./target-tree');
@@ -27,6 +31,7 @@ const SYSTEM = process.env.SYSTEM;
 const { GH_TOKEN } = process.env;
 
 const SAMPLE_CAP = 20;
+const GRAPHIFY_TIMEOUT_MS = 5 * 60 * 1000;
 const FRONTEND_MIN_FILES = 5; // fewer than this => no meaningful FE surface => omit stack (N/A)
 
 function writeJson(dir, name, obj) {
@@ -85,9 +90,26 @@ function collectStacks(relFiles) {
   return byStack;
 }
 
-function buildStack(repoDir, relFiles, stackKey, files) {
+function buildCodeGraph(repoDir) {
+  const run = (args, opts = {}) => execFileSync('graphify', args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, ...opts });
+  const installed = run(['--version']).trim().replace(/^graphify\s+/, '');
+  if (installed !== pinned.graphifyy) {
+    throw new Error(`graphify version mismatch: want ${pinned.graphifyy}, got ${installed}`);
+  }
+  run(['extract', repoDir, '--code-only'], {
+    cwd: repoDir, stdio: ['ignore', 'pipe', 'pipe'], timeout: GRAPHIFY_TIMEOUT_MS, killSignal: 'SIGTERM',
+  });
+  const graphPath = path.join(repoDir, 'graphify-out', 'graph.json');
+  if (!fs.existsSync(graphPath)) throw new Error(`graphify produced no graph.json for ${repoDir}`);
+  return fileDependencies(JSON.parse(fs.readFileSync(graphPath, 'utf8')));
+}
+
+function buildStack(repoDir, relFiles, stackKey, files, importsByTest) {
   if (!files.source.length) return null;
-  const agg = aggregateStack(files.source, files.test, SAMPLE_CAP);
+  const byName = aggregateStack(files.source, files.test, SAMPLE_CAP);
+  const agg = testPairingDisposition(stackKey) === 'imports'
+    ? choosePairing(aggregateStackByImports(files.source, files.test, importsByTest, SAMPLE_CAP), byName)
+    : { ...byName, pairing: 'filename' };
   const text = toolingText(repoDir, relFiles, stackKey);
   const thresholds = detectThresholds(text);
   const tool = detectTool(stackKey, text);
@@ -113,10 +135,16 @@ function scan(tree, outDir) {
 
   const relFiles = walkFiles(repoDir);
   const byStack = collectStacks(relFiles);
+  const needsGraph = STACK_ORDER.some((k) => byStack[k]?.source.length && byStack[k].test.length
+    && testPairingDisposition(k) === 'imports');
+  const importsByTest = needsGraph ? buildCodeGraph(repoDir) : new Map();
+  if (needsGraph && importsByTest.size === 0) {
+    throw new Error('code graph has no file dependencies; refusing to score test breadth from it');
+  }
   const stacks = {};
   for (const key of STACK_ORDER) {
     if (!byStack[key]) continue;
-    const s = buildStack(repoDir, relFiles, key, byStack[key]);
+    const s = buildStack(repoDir, relFiles, key, byStack[key], importsByTest);
     if (!s) continue;
     if (key === 'frontend' && s.source_files < FRONTEND_MIN_FILES) continue; // FE noise gate (N/A)
     stacks[key] = s;

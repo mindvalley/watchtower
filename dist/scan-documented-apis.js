@@ -4388,7 +4388,23 @@ function boundaryGraphDisposition(stack) {
   return stack === 'elixir' ? 'unreliable' : 'ok';
 }
 
-module.exports = { documentedApisDisposition, boundaryGraphDisposition };
+// C6 test breadth: how a source file is paired with its test.
+//
+//   'imports'  — a test counts only when it is named for the file AND the code
+//                graph shows it importing the file.
+//   'filename' — a same-named test anywhere in the repo counts (the original
+//                file-presence proxy).
+//
+// 'imports' only for stacks whose test imports the graph has been shown to
+// resolve; the scan still falls back per repo when it does not (choosePairing).
+// Elixir under-resolves (see boundaryGraphDisposition) and Python src-layout
+// imports are not resolved, so both keep the filename rule.
+const IMPORT_PAIRED_STACKS = new Set(['frontend']);
+function testPairingDisposition(stack) {
+  return IMPORT_PAIRED_STACKS.has(stack) ? 'imports' : 'filename';
+}
+
+module.exports = { documentedApisDisposition, boundaryGraphDisposition, testPairingDisposition };
 
 
 /***/ }),

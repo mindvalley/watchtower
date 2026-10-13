@@ -134,8 +134,8 @@
       "what": "Static test-coverage readiness: whether source files have tests, and whether CI enforces a coverage bar. A discipline floor, not a quality guarantee — coverage is not correctness.",
       "why": "Without a safety net of tests, neither an agent nor an engineer can refactor or ship with confidence.",
       "how": {
-        "tools": "Static test↔source mapping, and coverage enforcement read from GitHub Actions workflows (minimum_coverage gates). The coverage library itself is a secondary audit label. No suite is run.",
-        "anchors": "Two facets, mean of 2. Breadth: the fraction of source files with a paired test file, pooled across stacks. Discipline: coverage enforced in CI, graded on Google's 60/75/90 tiers, mean of the applicable stacks.",
+        "tools": "Static test↔source mapping, with the code graph (graphify) for JavaScript and TypeScript, and coverage enforcement read from GitHub Actions workflows (minimum_coverage gates). The coverage library itself is a secondary audit label. No suite is run.",
+        "anchors": "Two facets, mean of 2. Breadth: the fraction of source files with a paired test, pooled across stacks. Discipline: coverage enforced in CI, graded on Google's 60/75/90 tiers, mean of the applicable stacks.",
         "scoring": "Breadth is linear — 5 × the fraction of source files with a paired test. Discipline is a rung per stack: none 0, tool configured but no threshold 2.0, enforced at a threshold graded on the Google tiers (60 → 3.5, 75 → 4.25, 90 → 5.0). The criterion is the mean of the two facets. No hard-cap."
       },
       "nuances": [
@@ -144,8 +144,8 @@
           "detail": "A source file counts as tested when a test file pairs with it. Actual line coverage needs a compile, a database and secrets, none of which this scan has. The proxy reads generously and the report says so wherever it is quoted."
         },
         {
-          "title": "The pairing ignores paths, so it flatters",
-          "detail": "Breadth pairs a source file to a test by basename stem, ignoring directory, so one user_test.exs marks every */user.ex as tested. A precise per-unit map needs the Clear Domain Boundaries code graph and comes with it."
+          "title": "How a test is paired with a source file",
+          "detail": "For JavaScript and TypeScript, a source file counts as tested only when a test named for it imports it, as read from the code graph. A same-named test elsewhere that never touches the file does not count. Every other stack, and any repo where the graph sees the import for fewer than half of its same-named test pairs, falls back to the name alone, which ignores directory and so flatters: one user_test.exs marks every */user.ex as tested. The report names the method used for each stack and, on a fallback, the share the graph resolved."
         },
         {
           "title": "minimum_coverage: 0 counts as configured, not enforced",
@@ -160,7 +160,7 @@
           "detail": "Which paths matter most — the intersection of the code graph, churn, complexity and traffic — is not part of this criterion. Until it is, a high breadth number says tests exist, not that the right things are tested."
         }
       ],
-      "last_reviewed": "2026-09-14"
+      "last_reviewed": "2026-10-13"
     },
     {
       "id": "7",

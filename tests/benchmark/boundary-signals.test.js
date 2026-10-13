@@ -202,7 +202,7 @@ test('Rails-style layered app is recognised as layer-organised', () => {
 });
 
 const {
-  moduleForFile, buildModuleGraph, findModuleCycles, DEPENDENCY_RELATIONS,
+  moduleForFile, buildModuleGraph, findModuleCycles, DEPENDENCY_RELATIONS, fileDependencies,
 } = require('../../scripts/benchmark/boundary-signals');
 
 const MODS = [
@@ -891,4 +891,30 @@ test('one stray sibling and no source namespace reports the sibling reason', () 
   const res = discoverModules({ files, readText: reader({ 'package.json': '{"name":"root"}' }) });
   assert.strictEqual(res.kind, 'indeterminate');
   assert.match(res.reason, /top-level project director/);
+});
+
+test('fileDependencies: file-to-file edges under the same rules as the module graph', () => {
+  const graph = {
+    nodes: [
+      { id: 't', source_file: 'apps/web/src/x.test.ts' },
+      { id: 'x', source_file: 'apps/web/src/x.ts' },
+      { id: 'y', source_file: 'apps/web/src/y.ts' },
+      { id: 'z', source_file: 'apps/web/src/z.ts' },
+      { id: 'py', source_file: 'tools/z.py' },
+      { id: 'cfg', source_file: 'apps/web/src/config.json' },
+      { id: 'node', source_file: 'apps/web/src/crypto.ts' },
+    ],
+    links: [
+      { source: 't', target: 'x', relation: 'imports_from', confidence: 'EXTRACTED' },
+      { source: 't', target: 'y', relation: 'references', confidence: 'EXTRACTED' },
+      { source: 't', target: 'z', relation: 'indirect_call', confidence: 'INFERRED' },
+      { source: 't', target: 'py', relation: 'calls', confidence: 'EXTRACTED' },
+      { source: 't', target: 'cfg', relation: 'imports', confidence: 'EXTRACTED' },
+      { source: 't', target: 'node', relation: 'imports', confidence: 'EXTRACTED' },
+      { source: 't', target: 't', relation: 'calls', confidence: 'EXTRACTED' },
+    ],
+  };
+  const deps = fileDependencies(graph);
+  assert.deepStrictEqual([...deps.keys()], ['apps/web/src/x.test.ts']);
+  assert.deepStrictEqual([...deps.get('apps/web/src/x.test.ts')], ['apps/web/src/x.ts']);
 });

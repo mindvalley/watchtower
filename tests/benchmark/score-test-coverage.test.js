@@ -87,3 +87,26 @@ test('composite = mean(breadth, discipline); entry shape complete', () => {
   assert.ok(Array.isArray(r.actions));
   assert.ok(r.audit && r.audit.breadth && r.audit.discipline);
 });
+
+test('filename-paired stacks keep the original wording and audit shape', () => {
+  const r = scoreTestCoverage({ applicable: true, stacks: { elixir: { ...stack(4, 2, 'excoveralls', [80]), pairing: 'filename' } } });
+  assert.match(r.findings[0], /have a paired test\) — file-presence proxy, not line coverage$/);
+  assert.match(r.actions[0], /no paired test file \(file-presence proxy/);
+  assert.match(r.source, /breadth \(test↔source file-presence proxy, pooled full-stack\)/);
+  assert.deepStrictEqual(r.audit.breadth.by_stack.elixir, { source: 4, tested: 2 });
+});
+
+test('import-paired stacks say a same-named test must import the file', () => {
+  const r = scoreTestCoverage({
+    applicable: true,
+    stacks: {
+      elixir: { ...stack(4, 2, 'excoveralls', [80]), pairing: 'filename' },
+      frontend: { ...stack(6, 3, 'vitest/jest', [80]), pairing: 'imports', credited_by_name_only: 2 },
+    },
+  });
+  assert.match(r.findings[0], /5 of 10 source files have a paired test — Elixir: a same-named test; Frontend: a same-named test that imports the file\) — not line coverage$/);
+  assert.doesNotMatch(r.findings[0], /file-presence proxy/);
+  assert.match(r.actions[0], /5 source files have no paired test/);
+  assert.deepStrictEqual(r.audit.breadth.by_stack.frontend, { source: 6, tested: 3, pairing: 'imports', credited_by_name_only: 2 });
+  assert.deepStrictEqual(r.audit.breadth.by_stack.elixir, { source: 4, tested: 2 });
+});

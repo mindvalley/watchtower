@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const {
-  documentedApisDisposition, boundaryGraphDisposition,
+  documentedApisDisposition, boundaryGraphDisposition, testPairingDisposition,
 } = require('../../scripts/benchmark/criterion-stacks');
 
 test('C2 disposition: elixir AST, ruby N/A, others use the agnostic artifact path', () => {
@@ -28,4 +28,15 @@ test('C1 graph disposition: elixir is unreliable, other stacks are usable', () =
 test('C1 graph disposition is prototype-safe and defaults to usable', () => {
   assert.equal(boundaryGraphDisposition('toString'), 'ok');
   assert.equal(boundaryGraphDisposition(undefined), 'ok');
+});
+
+test('C6 pairing: imports only where the graph has been checked against real tests', () => {
+  assert.equal(testPairingDisposition('frontend'), 'imports');
+  assert.equal(testPairingDisposition('elixir'), 'filename');
+  assert.equal(testPairingDisposition('ruby'), 'filename');
+});
+
+test('C6 pairing defaults to filename for an unchecked or unknown stack', () => {
+  assert.equal(testPairingDisposition('toString'), 'filename');
+  assert.equal(testPairingDisposition(undefined), 'filename');
 });
