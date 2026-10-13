@@ -110,3 +110,21 @@ test('import-paired stacks say a same-named test must import the file', () => {
   assert.deepStrictEqual(r.audit.breadth.by_stack.frontend, { source: 6, tested: 3, pairing: 'imports', credited_by_name_only: 2 });
   assert.deepStrictEqual(r.audit.breadth.by_stack.elixir, { source: 4, tested: 2 });
 });
+
+test('a stack that fell back to filename pairing says so in the audit', () => {
+  const r = scoreTestCoverage({
+    applicable: true,
+    stacks: {
+      frontend: {
+        ...stack(10, 4, 'vitest/jest', [80]),
+        pairing: 'filename',
+        pairing_fallback: 'the code graph sees the import for 1 of 4 same-named test pairs (below 50%), so a same-named test counts',
+      },
+    },
+  });
+  assert.deepStrictEqual(r.audit.breadth.by_stack.frontend, {
+    source: 10, tested: 4,
+    pairing_fallback: 'the code graph sees the import for 1 of 4 same-named test pairs (below 50%), so a same-named test counts',
+  });
+  assert.match(r.findings[0], /file-presence proxy/);
+});

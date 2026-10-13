@@ -139,3 +139,17 @@ test('choosePairing: no name-matched pairs gives no evidence, so filename pairin
   assert.strictEqual(r.pairing, 'filename');
   assert.strictEqual(r.import_resolution.named_pairs, 0);
 });
+
+test('choosePairing: compares the unrounded rate with the threshold', () => {
+  const byImports = { source_files: 20000, tested_files: 9999, untested_samples: [], credited_by_name_only: 10000 };
+  const byName = { source_files: 20000, tested_files: 19999, untested_samples: [] };
+  assert.strictEqual(choosePairing(byImports, byName).pairing, 'filename');
+});
+
+test('choosePairing: says plainly when there were no same-named pairs to check', () => {
+  const r = choosePairing(
+    { source_files: 3, tested_files: 0, untested_samples: [], credited_by_name_only: 0 },
+    { source_files: 3, tested_files: 0, untested_samples: [] },
+  );
+  assert.match(r.pairing_fallback, /no same-named test pairs/);
+});

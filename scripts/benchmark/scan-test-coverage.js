@@ -101,7 +101,7 @@ function buildCodeGraph(repoDir) {
   });
   const graphPath = path.join(repoDir, 'graphify-out', 'graph.json');
   if (!fs.existsSync(graphPath)) throw new Error(`graphify produced no graph.json for ${repoDir}`);
-  return fileDependencies(JSON.parse(fs.readFileSync(graphPath, 'utf8')));
+  return fileDependencies(JSON.parse(fs.readFileSync(graphPath, 'utf8')), { forTestPairing: true });
 }
 
 function buildStack(repoDir, relFiles, stackKey, files, importsByTest) {
@@ -135,7 +135,9 @@ function scan(tree, outDir) {
 
   const relFiles = walkFiles(repoDir);
   const byStack = collectStacks(relFiles);
-  const needsGraph = STACK_ORDER.some((k) => byStack[k]?.source.length && byStack[k].test.length
+  const counted = (k) => byStack[k]?.source.length
+    && !(k === 'frontend' && byStack[k].source.length < FRONTEND_MIN_FILES);
+  const needsGraph = STACK_ORDER.some((k) => counted(k) && byStack[k].test.length
     && testPairingDisposition(k) === 'imports');
   const importsByTest = needsGraph ? buildCodeGraph(repoDir) : new Map();
   if (needsGraph && importsByTest.size === 0) {

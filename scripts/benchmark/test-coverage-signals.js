@@ -73,20 +73,21 @@ const IMPORT_RESOLUTION_THRESHOLD = 0.5;
 
 function choosePairing(byImports, byName) {
   const namedPairs = byImports.tested_files + byImports.credited_by_name_only;
-  const rate = namedPairs ? Number((byImports.tested_files / namedPairs).toFixed(4)) : 0;
+  const rate = namedPairs ? byImports.tested_files / namedPairs : 0;
   const importResolution = {
-    named_pairs: namedPairs, imported: byImports.tested_files, rate, threshold: IMPORT_RESOLUTION_THRESHOLD,
+    named_pairs: namedPairs,
+    imported: byImports.tested_files,
+    rate: Number(rate.toFixed(4)),
+    threshold: IMPORT_RESOLUTION_THRESHOLD,
   };
   if (namedPairs && rate >= IMPORT_RESOLUTION_THRESHOLD) {
     return { ...byImports, pairing: 'imports', import_resolution: importResolution };
   }
-  return {
-    ...byName,
-    pairing: 'filename',
-    import_resolution: importResolution,
-    pairing_fallback: `the code graph sees the import for ${byImports.tested_files} of ${namedPairs} same-named test pairs `
-      + `(below ${IMPORT_RESOLUTION_THRESHOLD * 100}%), so a same-named test counts`,
-  };
+  const reason = namedPairs
+    ? `the code graph sees the import for ${byImports.tested_files} of ${namedPairs} same-named test pairs `
+      + `(below ${IMPORT_RESOLUTION_THRESHOLD * 100}%), so a same-named test counts`
+    : 'no same-named test pairs to check the code graph against, so a same-named test counts';
+  return { ...byName, pairing: 'filename', import_resolution: importResolution, pairing_fallback: reason };
 }
 
 function detectThresholds(text) {
