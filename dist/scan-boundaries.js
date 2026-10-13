@@ -793,6 +793,52 @@ function isManifestPath(p) {
   return MANIFESTS.includes(base);
 }
 
+// One graphify link judged against every rule below: EXTRACTED confidence, a
+// dependency relation, both ends source code, no build output, same language
+// family, and no stdlib name collision on an import-shaped relation.
+// `forTestPairing` reads a test's own imports: it accepts .vue components as
+// JavaScript and keeps files whose names match a builtin (constants.ts), since
+// a test importing its own subject is never the stdlib misresolution.
+function classifyLink(l, byId, { forTestPairing = false } = {}) {
+  const rel = l.relation;
+  if (l.confidence !== 'EXTRACTED') return { skip: 'not-extracted' };
+  if (!isDependencyRelation(rel)) return { skip: 'non-dependency' };
+  const s = byId.get(l.source);
+  const t = byId.get(l.target);
+  if (!s || !t) return { skip: 'dangling' };
+  const sf = s.source_file || '';
+  const tf = t.source_file || '';
+  if (!sf || !tf) return { skip: 'no-file' };
+  if (isManifestPath(sf)) return { skip: 'manifest', node: l.source };
+  if (isManifestPath(tf)) return { skip: 'manifest', node: l.target };
+  // Config/asset files appear as targets when graphify traces configuration
+  // imports; they are not runtime module dependencies.
+  const isVue = (f) => forTestPairing && f.endsWith('.vue');
+  if (!(SOURCE_EXT.test(sf) || isVue(sf)) || !(SOURCE_EXT.test(tf) || isVue(tf))) return { skip: 'non-source-ext' };
+  // Test paths are deliberately NOT excluded: a test importing across a module
+  // boundary is a real code dependency.
+  if (isNonSourcePath(sf) || isNonSourcePath(tf)) return { skip: 'non-source-path' };
+  const sFam = isVue(sf) ? 'js' : languageFamily(sf);
+  const tFam = isVue(tf) ? 'js' : languageFamily(tf);
+  if (!sFam || !tFam || sFam !== tFam) return { skip: 'cross-language' };
+  const targetCollides = isStdlibCollidingFile(tf);
+  if (!forTestPairing && IMPORT_SHAPED_RELATIONS.has(rel) && targetCollides) return { skip: 'stdlib-collision' };
+  return { skip: null, sf, tf, targetCollides };
+}
+
+// File -> set of files it depends on, under the same rules as the module graph.
+function fileDependencies(graph, options = {}) {
+  const byId = new Map((graph.nodes || []).map((n) => [n.id, n]));
+  const deps = new Map();
+  for (const l of graph.links || []) {
+    const link = classifyLink(l, byId, options);
+    if (link.skip || link.sf === link.tf) continue;
+    if (!deps.has(link.sf)) deps.set(link.sf, new Set());
+    deps.get(link.sf).add(link.tf);
+  }
+  return deps;
+}
+
 function buildModuleGraph(graph, modules) {
   const byId = new Map((graph.nodes || []).map((n) => [n.id, n]));
   const edges = [];
@@ -827,37 +873,14 @@ function buildModuleGraph(graph, modules) {
   for (const l of graph.links || []) {
     const rel = l.relation;
     bump(rel, 'total');
-    if (l.confidence !== 'EXTRACTED') continue;
-    bump(rel, 'extracted');
-    if (!isDependencyRelation(rel)) continue;
-    const s = byId.get(l.source);
-    const t = byId.get(l.target);
-    if (!s || !t) continue;
-    const sf = s.source_file || '';
-    const tf = t.source_file || '';
-    if (!sf || !tf) continue;
-    if (isManifestPath(sf)) { skippedManifestNodes.add(l.source); continue; }
-    if (isManifestPath(tf)) { skippedManifestNodes.add(l.target); continue; }
-    // Require both ends to be source-code files. Config/asset files (e.g. .json,
-    // .yaml, .oxlintrc.json, babel.config.json) appear as edge targets when
-    // graphify's static analyser traces configuration imports; they are not runtime
-    // module dependencies and create spurious cross-module cycles.
-    if (!SOURCE_EXT.test(sf) || !SOURCE_EXT.test(tf)) continue;
-    // Build output, vendored trees and minified bundles are not repo source.
-    // Test paths are deliberately NOT excluded here: a test importing across a
-    // module boundary is a real code dependency, and dropping it would risk a
-    // false green on cycles.
-    if (isNonSourcePath(sf) || isNonSourcePath(tf)) { skippedNonSourcePathEdges += 1; continue; }
-    // Cross-language links are name collisions by construction (see above).
-    const sFam = languageFamily(sf);
-    const tFam = languageFamily(tf);
-    if (!sFam || !tFam || sFam !== tFam) { skippedCrossLanguageEdges += 1; continue; }
-    // Stdlib misresolution defence (see above).
-    const targetCollides = isStdlibCollidingFile(tf);
-    if (IMPORT_SHAPED_RELATIONS.has(rel) && targetCollides) {
-      skippedStdlibCollisionEdges += 1;
-      continue;
-    }
+    if (l.confidence === 'EXTRACTED') bump(rel, 'extracted');
+    const link = classifyLink(l, byId);
+    if (link.skip === 'manifest') { skippedManifestNodes.add(link.node); continue; }
+    if (link.skip === 'non-source-path') { skippedNonSourcePathEdges += 1; continue; }
+    if (link.skip === 'cross-language') { skippedCrossLanguageEdges += 1; continue; }
+    if (link.skip === 'stdlib-collision') { skippedStdlibCollisionEdges += 1; continue; }
+    if (link.skip) continue;
+    const { sf, tf, targetCollides } = link;
     bump(rel, 'considered');
     const from = moduleForFile(sf, modules);
     const to = moduleForFile(tf, modules);
@@ -1227,6 +1250,7 @@ function computeFanOut(edges, modules, externalByModule = {}) {
 }
 
 module.exports = {
+  classifyLink, fileDependencies,
   discoverModules, isLayerShaped, LAYER_VOCABULARY, MANIFESTS, SOURCE_EXT,
   DEPENDENCY_RELATIONS, NON_DEPENDENCY_RELATIONS, isDependencyRelation,
   IMPORT_SHAPED_RELATIONS, languageFamily, isStdlibCollidingFile,

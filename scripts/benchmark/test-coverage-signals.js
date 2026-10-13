@@ -3,8 +3,8 @@
 // Pure helpers for C6 Test Coverage: file classification (source vs test per
 // stack), test<->source pairing, and coverage-tooling + threshold detection.
 // No I/O — the scan edge (scan-test-coverage.js) reads files and calls these.
-// Pairing is basename-stem based (a file-presence proxy, NOT line coverage);
-// the precise per-unit map is a post-MVP C1 code-graph enhancement.
+// Pairing is by basename stem; where the code graph is trusted, the same-named
+// test must also import the file. Neither is line coverage.
 
 const SKIP_DIRS = new Set([
   'node_modules', 'deps', '_build', '.git', '.elixir_ls', 'tmp', 'vendor',
@@ -35,6 +35,59 @@ function aggregateStack(sourcePaths, testPaths, sampleCap = 20) {
     else if (untested.length < sampleCap) untested.push(norm(s));
   }
   return { source_files: sourcePaths.length, tested_files: tested, untested_samples: untested };
+}
+
+// A source file is tested when a test named for it imports it. `importsByTest`
+// maps each test path to the set of files the code graph says it depends on.
+function aggregateStackByImports(sourcePaths, testPaths, importsByTest, sampleCap = 20) {
+  const testsByStem = new Map();
+  for (const t of testPaths) {
+    const stem = testStem(t);
+    if (!testsByStem.has(stem)) testsByStem.set(stem, []);
+    testsByStem.get(stem).push(norm(t));
+  }
+  const untested = [];
+  let tested = 0;
+  let creditedByNameOnly = 0;
+  for (const s of sourcePaths) {
+    const src = norm(s);
+    const named = testsByStem.get(sourceStem(src)) || [];
+    if (named.some((t) => importsByTest.get(t)?.has(src))) tested += 1;
+    else {
+      if (named.length) creditedByNameOnly += 1;
+      if (untested.length < sampleCap) untested.push(src);
+    }
+  }
+  return {
+    source_files: sourcePaths.length,
+    tested_files: tested,
+    untested_samples: untested,
+    credited_by_name_only: creditedByNameOnly,
+  };
+}
+
+// Of the source files that have a same-named test, the share where the graph
+// also sees that test import the file. Below the threshold the graph is not
+// resolving this repo's test imports, so import pairing would under-count.
+const IMPORT_RESOLUTION_THRESHOLD = 0.5;
+
+function choosePairing(byImports, byName) {
+  const namedPairs = byImports.tested_files + byImports.credited_by_name_only;
+  const rate = namedPairs ? byImports.tested_files / namedPairs : 0;
+  const importResolution = {
+    named_pairs: namedPairs,
+    imported: byImports.tested_files,
+    rate: Number(rate.toFixed(4)),
+    threshold: IMPORT_RESOLUTION_THRESHOLD,
+  };
+  if (namedPairs && rate >= IMPORT_RESOLUTION_THRESHOLD) {
+    return { ...byImports, pairing: 'imports', import_resolution: importResolution };
+  }
+  const reason = namedPairs
+    ? `the code graph sees the import for ${byImports.tested_files} of ${namedPairs} same-named test pairs `
+      + `(below ${IMPORT_RESOLUTION_THRESHOLD * 100}%), so a same-named test counts`
+    : 'no same-named test pairs to check the code graph against, so a same-named test counts';
+  return { ...byName, pairing: 'filename', import_resolution: importResolution, pairing_fallback: reason };
 }
 
 function detectThresholds(text) {
@@ -73,5 +126,6 @@ function detectTool(stack, text) {
 }
 
 module.exports = {
-  SKIP_DIRS, aggregateStack, detectThresholds, detectTool,
+  SKIP_DIRS, aggregateStack, aggregateStackByImports, choosePairing, IMPORT_RESOLUTION_THRESHOLD,
+  detectThresholds, detectTool,
 };

@@ -51,6 +51,11 @@ function scoreTestCoverage(report, { assessedAt } = {}) {
     totalSource += Number(s.source_files) || 0;
     totalTested += Number(s.tested_files) || 0;
     byStackBreadth[k] = { source: Number(s.source_files) || 0, tested: Number(s.tested_files) || 0 };
+    if (s.pairing === 'imports') {
+      byStackBreadth[k].pairing = 'imports';
+      byStackBreadth[k].credited_by_name_only = Number(s.credited_by_name_only) || 0;
+    }
+    if (s.pairing_fallback) byStackBreadth[k].pairing_fallback = s.pairing_fallback;
   }
   if (totalSource === 0) return null;
   const breadthCoverage = totalTested / totalSource;
@@ -76,8 +81,13 @@ function scoreTestCoverage(report, { assessedAt } = {}) {
   const pct = Math.round(breadthCoverage * 100);
   const untestedTotal = totalSource - totalTested;
 
-  const findings = [
-    `Test breadth: ${pct}% (${totalTested} of ${totalSource} source files have a paired test) — file-presence proxy, not line coverage`,
+  const importPaired = keys.filter((k) => stacks[k].pairing === 'imports');
+  const pairingNote = keys
+    .map((k) => `${STACK_LABEL[k] || k}: ${importPaired.includes(k) ? 'a same-named test that imports the file' : 'a same-named test'}`)
+    .join('; ');
+  const findings = [importPaired.length
+    ? `Test breadth: ${pct}% (${totalTested} of ${totalSource} source files have a paired test — ${pairingNote}) — not line coverage`
+    : `Test breadth: ${pct}% (${totalTested} of ${totalSource} source files have a paired test) — file-presence proxy, not line coverage`,
   ];
 
   // Discipline finding: summarise the enforcement picture across stacks.
@@ -92,7 +102,10 @@ function scoreTestCoverage(report, { assessedAt } = {}) {
 
   const actions = [];
   if (untestedTotal > 0) {
-    actions.push(`Add tests for untested source files — ${untestedTotal} source file${untestedTotal === 1 ? ' has' : 's have'} no paired test file (file-presence proxy; a paired test does not guarantee line coverage).`);
+    const files = `${untestedTotal} source file${untestedTotal === 1 ? ' has' : 's have'}`;
+    actions.push(importPaired.length
+      ? `Add tests for untested source files — ${files} no paired test (${pairingNote}; a paired test does not guarantee line coverage).`
+      : `Add tests for untested source files — ${files} no paired test file (file-presence proxy; a paired test does not guarantee line coverage).`);
   }
   if (noneBits.length) {
     actions.push(`Adopt a coverage tool and enforce a minimum threshold in CI for: ${noneBits.join(', ')} (Google acceptable floor is 60%).`);
@@ -107,7 +120,9 @@ function scoreTestCoverage(report, { assessedAt } = {}) {
     critical: false,
     assessed: true,
     assessed_at: assessedAt,
-    source: 'Test-coverage readiness — breadth (test↔source file-presence proxy, pooled full-stack) + discipline (CI-enforced coverage, Google 60/75/90 tiers). Static/headless; actual coverage % deferred to Monitor.',
+    source: importPaired.length
+      ? 'Test-coverage readiness — breadth (a same-named test that imports the file where the code graph is trusted, else a same-named test; pooled full-stack) + discipline (CI-enforced coverage, Google 60/75/90 tiers). Static/headless; actual coverage % deferred to Monitor.'
+      : 'Test-coverage readiness — breadth (test↔source file-presence proxy, pooled full-stack) + discipline (CI-enforced coverage, Google 60/75/90 tiers). Static/headless; actual coverage % deferred to Monitor.',
     sub: {
       test_breadth: {
         score: breadthScore, colour: colourFor(breadthScore), pct, tested: totalTested, total: totalSource,
