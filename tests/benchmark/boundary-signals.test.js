@@ -922,8 +922,8 @@ test('fileDependencies: file-to-file edges under the same rules as the module gr
 test('fileDependencies for test pairing keeps builtin-named files and Vue components', () => {
   const graph = {
     nodes: [
-      { id: 't', source_file: 'src/constants.test.ts' },
-      { id: 'c', source_file: 'src/constants.ts' },
+      { id: 't', source_file: 'src/zlib.test.ts' },
+      { id: 'c', source_file: 'src/zlib.ts' },
       { id: 's', source_file: 'src/Button.spec.ts' },
       { id: 'v', source_file: 'src/Button.vue' },
     ],
@@ -934,6 +934,6 @@ test('fileDependencies for test pairing keeps builtin-named files and Vue compon
   };
   assert.deepStrictEqual([...fileDependencies(graph).keys()], []);
   const deps = fileDependencies(graph, { forTestPairing: true });
-  assert.deepStrictEqual([...deps.get('src/constants.test.ts')], ['src/constants.ts']);
+  assert.deepStrictEqual([...deps.get('src/zlib.test.ts')], ['src/zlib.ts']);
   assert.deepStrictEqual([...deps.get('src/Button.spec.ts')], ['src/Button.vue']);
 });
