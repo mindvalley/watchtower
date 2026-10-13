@@ -796,7 +796,10 @@ function isManifestPath(p) {
 // One graphify link judged against every rule below: EXTRACTED confidence, a
 // dependency relation, both ends source code, no build output, same language
 // family, and no stdlib name collision on an import-shaped relation.
-function classifyLink(l, byId) {
+// `forTestPairing` reads a test's own imports: it accepts .vue components as
+// JavaScript and keeps files whose names match a builtin (constants.ts), since
+// a test importing its own subject is never the stdlib misresolution.
+function classifyLink(l, byId, { forTestPairing = false } = {}) {
   const rel = l.relation;
   if (l.confidence !== 'EXTRACTED') return { skip: 'not-extracted' };
   if (!isDependencyRelation(rel)) return { skip: 'non-dependency' };
@@ -810,24 +813,25 @@ function classifyLink(l, byId) {
   if (isManifestPath(tf)) return { skip: 'manifest', node: l.target };
   // Config/asset files appear as targets when graphify traces configuration
   // imports; they are not runtime module dependencies.
-  if (!SOURCE_EXT.test(sf) || !SOURCE_EXT.test(tf)) return { skip: 'non-source-ext' };
+  const isVue = (f) => forTestPairing && f.endsWith('.vue');
+  if (!(SOURCE_EXT.test(sf) || isVue(sf)) || !(SOURCE_EXT.test(tf) || isVue(tf))) return { skip: 'non-source-ext' };
   // Test paths are deliberately NOT excluded: a test importing across a module
   // boundary is a real code dependency.
   if (isNonSourcePath(sf) || isNonSourcePath(tf)) return { skip: 'non-source-path' };
-  const sFam = languageFamily(sf);
-  const tFam = languageFamily(tf);
+  const sFam = isVue(sf) ? 'js' : languageFamily(sf);
+  const tFam = isVue(tf) ? 'js' : languageFamily(tf);
   if (!sFam || !tFam || sFam !== tFam) return { skip: 'cross-language' };
   const targetCollides = isStdlibCollidingFile(tf);
-  if (IMPORT_SHAPED_RELATIONS.has(rel) && targetCollides) return { skip: 'stdlib-collision' };
+  if (!forTestPairing && IMPORT_SHAPED_RELATIONS.has(rel) && targetCollides) return { skip: 'stdlib-collision' };
   return { skip: null, sf, tf, targetCollides };
 }
 
 // File -> set of files it depends on, under the same rules as the module graph.
-function fileDependencies(graph) {
+function fileDependencies(graph, options = {}) {
   const byId = new Map((graph.nodes || []).map((n) => [n.id, n]));
   const deps = new Map();
   for (const l of graph.links || []) {
-    const link = classifyLink(l, byId);
+    const link = classifyLink(l, byId, options);
     if (link.skip || link.sf === link.tf) continue;
     if (!deps.has(link.sf)) deps.set(link.sf, new Set());
     deps.get(link.sf).add(link.tf);

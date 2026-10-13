@@ -2988,6 +2988,7 @@ function scoreTestCoverage(report, { assessedAt } = {}) {
       byStackBreadth[k].pairing = 'imports';
       byStackBreadth[k].credited_by_name_only = Number(s.credited_by_name_only) || 0;
     }
+    if (s.pairing_fallback) byStackBreadth[k].pairing_fallback = s.pairing_fallback;
   }
   if (totalSource === 0) return null;
   const breadthCoverage = totalTested / totalSource;
