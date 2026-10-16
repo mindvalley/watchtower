@@ -30,7 +30,8 @@ const { materialise } = require('./target-tree');
 const SYSTEM = process.env.SYSTEM;
 const { GH_TOKEN } = process.env;
 
-const SAMPLE_CAP = 20;
+// Every untested file is kept, so the findings can be ranked before any are cut.
+const SAMPLE_CAP = Infinity;
 const GRAPHIFY_TIMEOUT_MS = 5 * 60 * 1000;
 const FRONTEND_MIN_FILES = 5; // fewer than this => no meaningful FE surface => omit stack (N/A)
 

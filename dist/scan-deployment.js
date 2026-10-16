@@ -578,7 +578,20 @@ function relativizePaths(node) {
   return relativize(node);
 }
 
-module.exports = { relativize, relativizePaths };
+// Maps a location in an extracted Vue script back to its .vue file and line.
+// Longest match, so keys sharing a suffix ("src/Login.vue.ts" and
+// "components/src/Login.vue.ts") never collide.
+function vueSourceMapper(offsets) {
+  const entries = Object.entries(offsets || {});
+  return (it) => {
+    const matches = it.file ? entries.filter(([k]) => it.file.endsWith(k)) : [];
+    if (!matches.length) return it;
+    const [, { source, lineOffset }] = matches.reduce((a, b) => (a[0].length >= b[0].length ? a : b));
+    return { ...it, file: source, line: it.line != null ? (it.line - 1) + lineOffset : it.line };
+  };
+}
+
+module.exports = { relativize, relativizePaths, vueSourceMapper };
 
 
 /***/ }),

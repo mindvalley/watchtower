@@ -415,3 +415,57 @@ test('C1 withholds a grade for an elixir system but scores the same report for T
   assert.match(out.systems.alpha.criteria['1'].indeterminate, /code graph/i);
   assert.strictEqual(out.systems.foxtrot.criteria['1'].score, 5.0);
 });
+
+// --- ranking the places under an action (place-ranking.js) ------------------
+
+function rankedSystem(stack, hotspots) {
+  const csv = [
+    '40,13,300,2,40,"quiet@10-50@src/quiet.ts","src/quiet.ts","quiet","quiet ( a )",10,50',
+    '60,22,500,3,60,"core@1-60@src/core.ts","src/core.ts","core","core ( a )",1,60',
+    '60,15,500,3,60,"busy@1-60@src/busy.ts","src/busy.ts","busy","busy ( a )",1,60',
+  ].join('\n');
+  return {
+    'simplicity-meta': { stack, tool: 'lizard', loc: 2000 },
+    lizard: { format: 'csv', text: csv },
+    jscpd: { statistics: { total: { percentage: 0, duplicatedLines: 0, lines: 2000, clones: 0 } } },
+    'test-coverage': { applicable: true, stacks: { frontend: {
+      source_files: 3, tested_files: 0, untested_samples: ['src/quiet.ts', 'src/core.ts', 'src/busy.ts'],
+      tooling: { tool: null, present: false, thresholds: [], enforced: false },
+    } } },
+    ...(hotspots ? { hotspots } : {}),
+  };
+}
+const HOTSPOTS = {
+  window_days: 90, graph: 'built', history: 'read',
+  files: { 'src/core.ts': { dependents: 12, changes: 1 }, 'src/busy.ts': { dependents: 0, changes: 9 } },
+};
+async function actionsFor(stack, hotspots) {
+  const out = await buildBenchmarkData({
+    systems: [{ name: 'webapp', stack, sast_tool: 'semgrep' }],
+    readReport: fakeReader({ webapp: rankedSystem(stack, hotspots) }),
+    sastTool: 'semgrep', assessedAt: '2026-10-16', lastUpdated: '2026-10-16',
+  });
+  const c = out.systems.webapp.criteria;
+  return { c8: c['8'], c6: c['6'] };
+}
+
+test('the complexity and untested-file actions name the most used and most changed files first', async () => {
+  const { c8, c6 } = await actionsFor('ts', HOTSPOTS);
+  assert.match(c8.actions[0], / Start with the most used and most changed: src\/core\.ts, src\/busy\.ts\.$/);
+  assert.match(c6.actions[0], / Start with the most used and most changed: src\/core\.ts, src\/busy\.ts\.$/);
+});
+
+test('on a stack whose graph is not trusted, the action ranks by changes alone and says so', async () => {
+  const { c8 } = await actionsFor('elixir', HOTSPOTS);
+  assert.match(c8.actions[0], / Start with the most changed: src\/busy\.ts, src\/core\.ts\.$/);
+});
+
+test('ranking changes no score and, without a ranking report, no action either', async () => {
+  const plain = await actionsFor('ts', null);
+  const ranked = await actionsFor('ts', HOTSPOTS);
+  assert.ok(!/Start with/.test(plain.c8.actions.join(' ')));
+  for (const key of ['c8', 'c6']) {
+    const strip = (c) => ({ ...c, actions: c.actions.map((a) => a.replace(/ Start with .*$/, '')) });
+    assert.deepStrictEqual(strip(ranked[key]), plain[key]);
+  }
+});

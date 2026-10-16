@@ -137,7 +137,7 @@ function scoreGate(gates = []) {
 }
 
 function scoreSimplicity({
-  complexity, duplication, tool, gates, languages, unmeasured, skippedImmaterial, assessedAt,
+  complexity, duplication, tool, gates, languages, unmeasured, skippedImmaterial, assessedAt, startWith = null,
 }) {
   const density = scoreComplexity(complexity);
   const gate = scoreGate(gates);
@@ -192,6 +192,7 @@ function scoreSimplicity({
     } else {
       actions.push(`${base}; no CI step currently enforces a complexity limit, so the count can grow unchecked.`);
     }
+    if (startWith) actions[actions.length - 1] += ` ${startWith}`;
   }
   if (duplication.percentage >= 5) {
     actions.push('Extract the duplicated blocks (jscpd report lists locations) into shared modules; duplication above 5% makes the canonical pattern ambiguous for agents.');
