@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 const {
-  CRITERIA, criterionRows, weakestScored, explainColour, severityOf, imperative, topAction,
+  CRITERIA, criterionRows, weakestScored, explainColour, severityOf, imperative, topAction, rankedActions,
 } = require('../public/js/criteria.js');
 
 const DATA = path.join(__dirname, '..', 'public', 'data');
@@ -252,3 +252,30 @@ test('the full action is carried alongside the trimmed one, so nothing is lost',
   assert.notStrictEqual(a.action, full);
 });
 
+
+test('remediation is listed worst first: severity band, then score inside the band', () => {
+  const order = rankedActions(sys({
+    2: { score: 3.0, colour: 'amber', actions: ['describe the API'] },
+    6: { score: 1.2, colour: 'red', actions: ['add tests'] },
+    8: { score: 4.0, colour: 'green', actions: ['tidy up'] },
+    9: { score: 4.5, colour: 'green', critical: true, actions: ['rotate the key'] },
+  })).map((r) => r.key);
+  assert.deepStrictEqual(order, ['9', '6', '2', '8']);
+});
+
+test('remediation keeps green criteria that still carry an action, last', () => {
+  const rows = rankedActions(sys({ 8: { score: 4.2, colour: 'green', actions: ['tidy up'] } }));
+  assert.deepStrictEqual(rows.map((r) => [r.key, r.severity]), [['8', 'low']]);
+});
+
+test('remediation puts a criterion with actions but no score after every scored one', () => {
+  const order = rankedActions(sys({
+    2: { score: null, actions: ['commit an API spec'] },
+    8: { score: 4.2, colour: 'green', actions: ['tidy up'] },
+  })).map((r) => r.key);
+  assert.deepStrictEqual(order, ['8', '2']);
+});
+
+test('remediation skips criteria with no actions', () => {
+  assert.deepStrictEqual(rankedActions(sys({ 6: { score: 1.0, colour: 'red', actions: [] } })), []);
+});
