@@ -8,9 +8,9 @@
 // The criterion namespace now lives in /js/criteria.js, shared with the
 // overview. It used to be declared here, which meant the overview could not
 // reach it without a third copy of the same seven names.
-const CRITERIA = (typeof require === 'function'
+const { CRITERIA, rankedActions } = typeof require === 'function'
   ? require('../js/criteria.js')
-  : window.Criteria).CRITERIA;
+  : window.Criteria;
 // The export builders, and the column ordering all three surfaces share.
 const FINDINGS_CSV = (typeof require === 'function'
   ? require('../js/findings-csv.js')
@@ -433,8 +433,8 @@ async function initScorecard(systemKey) {
       </tr>`;
   }).join('');
 
-  // Remediation actions for any scored criterion that has them.
-  const withActions = CRITERIA.filter(({ key }) => ((crit[key] || {}).actions || []).length > 0);
+  // Remediation actions, worst criterion first.
+  const withActions = rankedActions(sys);
   const section = document.getElementById('remediation-section');
   if (withActions.length && section) {
     section.style.display = '';

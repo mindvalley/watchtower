@@ -136,6 +136,20 @@ function imperative(text) {
     .trim();
 }
 
+// Every criterion that carries an action, worst first. Unscored ones go last.
+function rankedActions(sys) {
+  const criteria = (sys && sys.criteria) || {};
+  const rank = (r) => (r.score == null ? Infinity : SEVERITY_ORDER[r.severity]);
+  return criterionRows(sys)
+    .map((r) => ({
+      ...r,
+      severity: r.score == null ? null : severityOf(r),
+      actions: (criteria[r.key] || {}).actions || [],
+    }))
+    .filter((r) => r.actions.length)
+    .sort((a, b) => rank(a) - rank(b) || (a.score ?? 0) - (b.score ?? 0));
+}
+
 // The single action a card should show: worst severity band first, then lowest
 // score inside the band. Ranked by band rather than by predicted score movement
 // — Lighthouse's own documentation says estimated savings overlap and cannot be
@@ -153,17 +167,8 @@ function imperative(text) {
 // it on the real board so the day it stops holding is a failing test rather
 // than a card quietly recommending the wrong fix.
 function topAction(sys) {
-  const criteria = (sys && sys.criteria) || {};
-  const candidates = criterionRows(sys)
-    .filter((r) => r.score != null)
-    .map((r) => ({ ...r, severity: severityOf(r), actions: (criteria[r.key] || {}).actions || [] }))
-    .filter((r) => r.severity !== 'low' && r.actions.length);
-  if (!candidates.length) return null;
-
-  candidates.sort((a, b) => (
-    SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || a.score - b.score
-  ));
-  const top = candidates[0];
+  const top = rankedActions(sys).find((r) => r.score != null && r.severity !== 'low');
+  if (!top) return null;
   return {
     key: top.key,
     label: top.label,
@@ -177,6 +182,7 @@ function topAction(sys) {
 // <script> and reads them off window. Guarded so each is a no-op in the other.
 const api = {
   CRITERIA, criterionRows, weakestScored, explainColour, severityOf, imperative, topAction,
+  rankedActions,
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 if (typeof window !== 'undefined') window.Criteria = api;
