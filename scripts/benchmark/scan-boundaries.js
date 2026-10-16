@@ -16,12 +16,13 @@ const {
   discoverModules, buildModuleGraph, findModuleCycles, computeFanOut,
   detectExternalTargets, moduleForFile, SOURCE_EXT,
   isNonSourcePath, isTestOrFixturePath,
-  moduleGraphCoverage, MODULE_GRAPH_COVERAGE_THRESHOLD,
+  moduleGraphCoverage, MODULE_GRAPH_COVERAGE_THRESHOLD, fileDependencies,
 } = require('./boundary-signals');
 const {
   parseGitLog, modulesPerRevision, couplingPairs, CODE_MAAT_DEFAULTS,
 } = require('./change-coupling');
 const { declaredDependencyPairs, pairKey } = require('./declared-deps');
+const { buildHotspots, definingFiles } = require('./place-ranking');
 
 const GRAPHIFY_VERSION = '0.9.28';
 const MAX_CYCLES = 500;
@@ -96,7 +97,19 @@ function indeterminateReport(reason, discovery, extra = {}) {
 // are repo-relative, and the copy preserves them, so the two line up. A target
 // that is not a git repository at all passes null and lands in the catch below,
 // which is the honest answer: not measured.
-function collectChangeCoupling(repoDir, discovery, files, readText, historyDir = repoDir) {
+function readHistory(historyDir) {
+  try {
+    if (!historyDir) throw new Error('no history location');
+    return parseGitLog(sh('git', [
+      'log', '--no-merges', `--since=${COUPLING_WINDOW_DAYS} days ago`,
+      '--format=commit%x09%H', '--name-only',
+    ], { cwd: historyDir, stdio: ['ignore', 'pipe', 'pipe'] }));
+  } catch {
+    return null;
+  }
+}
+
+function collectChangeCoupling(discovery, files, readText, revisions) {
   const base = {
     window_days: COUPLING_WINDOW_DAYS,
     thresholds: CODE_MAAT_DEFAULTS,
@@ -109,20 +122,10 @@ function collectChangeCoupling(repoDir, discovery, files, readText, historyDir =
     violations: [],
   };
 
-  let log;
-  try {
-    if (!historyDir) throw new Error('no history location');
-    log = sh('git', [
-      'log', '--no-merges', `--since=${COUPLING_WINDOW_DAYS} days ago`,
-      '--format=commit%x09%H', '--name-only',
-    ], { cwd: historyDir, stdio: ['ignore', 'pipe', 'pipe'] });
-  } catch {
-    // No history available: a bare depth-1 clone that could not be deepened, or
-    // a local folder that is not a git repository.
-    return { ...base, unavailable: 'git history for the window could not be read' };
-  }
+  // No history available: a bare depth-1 clone that could not be deepened, or
+  // a local folder that is not a git repository.
+  if (!revisions) return { ...base, unavailable: 'git history for the window could not be read' };
 
-  const revisions = parseGitLog(log);
   const mapped = modulesPerRevision(revisions, discovery.modules);
   const { pairs, qualifying_modules: qualifying, total_revisions: total } = couplingPairs(mapped.revisions);
 
@@ -147,15 +150,28 @@ function collectChangeCoupling(repoDir, discovery, files, readText, historyDir =
   };
 }
 
+// Returns the C1 report and, beside it, the per-file ranking of places
+// (place-ranking.js), which reuses this scan's graph and history.
 function scanRepo(repoDir, { historyDir = repoDir } = {}) {
   const files = listFiles(repoDir);
   const readText = (p) => {
     try { return fs.readFileSync(path.join(repoDir, p), 'utf8'); } catch { return null; }
   };
+  const revisions = readHistory(historyDir);
+  const hotspotsOf = (graph, graphUnavailable) => buildHotspots({
+    deps: graph ? fileDependencies(graph) : null,
+    definers: graph ? definingFiles(graph) : null,
+    revisions,
+    windowDays: COUPLING_WINDOW_DAYS,
+    graphUnavailable,
+  });
 
   const discovery = discoverModules({ files, readText });
   if (discovery.kind === 'indeterminate') {
-    return indeterminateReport(discovery.reason, discovery);
+    return {
+      report: indeterminateReport(discovery.reason, discovery),
+      hotspots: hotspotsOf(null, 'modules not discoverable, so the graph was not built'),
+    };
   }
 
   sh('graphify', ['extract', repoDir, '--code-only'], {
@@ -216,8 +232,8 @@ function scanRepo(repoDir, { historyDir = repoDir } = {}) {
     // needs history and manifests, not the graph, so it is still measurable and
     // the scorer can grade the criterion on it alone. Without this, a repo whose
     // graph is degenerate loses a signal we actually have.
-    report.change_coupling = collectChangeCoupling(repoDir, discovery, files, readText, historyDir);
-    return report;
+    report.change_coupling = collectChangeCoupling(discovery, files, readText, revisions);
+    return { report, hotspots: hotspotsOf(graph) };
   }
 
   const cycles = findModuleCycles(edges, { maxCycles: MAX_CYCLES, directions });
@@ -246,7 +262,7 @@ function scanRepo(repoDir, { historyDir = repoDir } = {}) {
 
   const fanOut = computeFanOut(edges, discovery.modules, externalByModule);
 
-  return {
+  const report = {
     applicable: true,
     indeterminate: null,
     module_discovery: {
@@ -256,7 +272,7 @@ function scanRepo(repoDir, { historyDir = repoDir } = {}) {
     },
     cycles,
     fan_out: fanOut,
-    change_coupling: collectChangeCoupling(repoDir, discovery, files, readText, historyDir),
+    change_coupling: collectChangeCoupling(discovery, files, readText, revisions),
     external_targets: externalByModule,
     external_target_detection: {
       files_scanned: filesScannedForTargets,
@@ -266,6 +282,7 @@ function scanRepo(repoDir, { historyDir = repoDir } = {}) {
     },
     graph: graphAudit,
   };
+  return { report, hotspots: hotspotsOf(graph) };
 }
 
 function main() {
@@ -304,9 +321,10 @@ function main() {
       }
     }
 
-    const report = scanRepo(tree.dir, { historyDir: tree.historyDir });
+    const { report, hotspots } = scanRepo(tree.dir, { historyDir: tree.historyDir });
     const outDir = reportsDir(system);
     fs.writeFileSync(path.join(outDir, 'boundaries.json'), `${JSON.stringify(report, null, 2)}\n`);
+    fs.writeFileSync(path.join(outDir, 'hotspots.json'), `${JSON.stringify(hotspots)}\n`);
     process.stdout.write(
       `boundaries: ${system} modules=${report.module_discovery.modules.length} `
       + `edges=${report.graph.edges} cycles=${report.cycles.count}`

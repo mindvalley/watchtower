@@ -238,3 +238,23 @@ test('c8Groups accumulates items from multiple languages and remaps Vue file and
   assert.strictEqual(tsItem.file, 'src/Component.vue', 'extraction path must be remapped to .vue source');
   assert.strictEqual(tsItem.line, 14, 'line must be (start-1) + lineOffset = (10-1)+5 = 14');
 });
+
+test('complexity findings and untested files are listed most used and most changed first', async () => {
+  const csv = [
+    '40,13,300,2,40,"quiet@10-50@src/quiet.ts","src/quiet.ts","quiet","quiet ( a )",10,50',
+    '60,22,500,3,60,"core@1-60@src/core.ts","src/core.ts","core","core ( a )",1,60',
+  ].join('\n');
+  const map = {
+    'simplicity-meta': { stack: 'ts', tool: 'lizard', loc: 2000 },
+    lizard: { format: 'csv', text: csv },
+    'test-coverage': { applicable: true, stacks: { frontend: {
+      source_files: 2, tested_files: 0, untested_samples: ['src/quiet.ts', 'src/core.ts'],
+      tooling: { tool: null, present: false, thresholds: [], enforced: false },
+    } } },
+    hotspots: { graph: 'built', files: { 'src/core.ts': { dependents: 5, changes: 2 } } },
+  };
+  const env = await buildFindingsForSystem({ sys: { name: 'sys', stack: 'ts' }, readReport: reader(map), sastTool: 'semgrep', triageConfig: {}, generatedAt: '2026-10-16' });
+  const first = (key, sub) => env.criteria[key].groups.find((g) => g.sub === sub).items[0].file;
+  assert.strictEqual(first('8', 'complexity'), 'src/core.ts');
+  assert.strictEqual(first('6', 'breadth'), 'src/core.ts');
+});
