@@ -35,7 +35,7 @@ function disciplineForStack(tooling) {
   return { rung: 'none', score: 0.0, thresholds: [] };
 }
 
-function scoreTestCoverage(report, { assessedAt } = {}) {
+function scoreTestCoverage(report, { assessedAt, startWith = null } = {}) {
   const r = report || {};
   if (!r.applicable) return null;
   const stacks = r.stacks || {};
@@ -106,6 +106,7 @@ function scoreTestCoverage(report, { assessedAt } = {}) {
     actions.push(importPaired.length
       ? `Add tests for untested source files — ${files} no paired test (${pairingNote}; a paired test does not guarantee line coverage).`
       : `Add tests for untested source files — ${files} no paired test file (file-presence proxy; a paired test does not guarantee line coverage).`);
+    if (startWith) actions[actions.length - 1] += ` ${startWith}`;
   }
   if (noneBits.length) {
     actions.push(`Adopt a coverage tool and enforce a minimum threshold in CI for: ${noneBits.join(', ')} (Google acceptable floor is 60%).`);

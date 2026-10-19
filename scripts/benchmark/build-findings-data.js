@@ -12,7 +12,8 @@ const {
 const { createAllowanceSet } = require('./allowances');
 // Shared with the allowances matcher, which has to shorten a scanner path on the
 // way IN for the same reason this shortens it on the way out. See repo-paths.js.
-const { relativizePaths } = require('./repo-paths');
+const { relativizePaths, vueSourceMapper } = require('./repo-paths');
+const { rankPlaces, rankingFor } = require('./place-ranking');
 
 const nonEmpty = (items) => (Array.isArray(items) ? items.filter(Boolean) : []);
 function group(sub, label, disposition, items) {
@@ -61,18 +62,9 @@ async function c8Groups(sys, readReport, allow) {
     : (meta.tool ? [{ language: meta.stack, tool: meta.tool, report: meta.tool }] : []);
   if (!entries.length) return [];
 
-  const offsets = (await readReport(sys.name, 'vue-offsets')) || {};
-  // Map an extracted Vue script location back to its .vue file and original
-  // line. A location pointing at the extraction tree is unactionable.
-  // Use longest-match so that two offset keys sharing a suffix (e.g.
-  // "src/Login.vue.ts" and "components/src/Login.vue.ts") never collide.
-  const toSource = (it, language) => {
-    const matches = it.file ? Object.entries(offsets).filter(([k]) => it.file.endsWith(k)) : [];
-    const hit = matches.length ? matches.reduce((a, b) => (a[0].length >= b[0].length ? a : b)) : null;
-    if (!hit) return { ...it, language };
-    const [, { source, lineOffset }] = hit;
-    return { ...it, file: source, line: it.line != null ? (it.line - 1) + lineOffset : it.line, language };
-  };
+  const toVueSource = vueSourceMapper(await readReport(sys.name, 'vue-offsets'));
+  const toSource = (it, language) => ({ ...toVueSource(it), language });
+  const { hotspots, useDependents } = rankingFor(sys, await readReport(sys.name, 'hotspots'));
 
   const items = [];
   const allowedItems = [];
@@ -94,7 +86,7 @@ async function c8Groups(sys, readReport, allow) {
   }
   const dup = parseDuplication(await readReport(sys.name, 'jscpd'));
   return [
-    group('complexity', 'Cyclomatic complexity', null, items),
+    group('complexity', 'Cyclomatic complexity', null, rankPlaces(items, hotspots, { useDependents })),
     group('complexity', 'Cyclomatic complexity', 'allowed', allowedItems),
     // Duplication carries no allowed group: its percentage comes from jscpd's own
     // totals rather than this list, so filtering here would show findings removed
@@ -106,6 +98,7 @@ async function c8Groups(sys, readReport, allow) {
 async function c6Groups(sys, readReport) {
   const r = await readReport(sys.name, 'test-coverage');
   if (!r || !r.stacks) return [];
+  const { hotspots, useDependents } = rankingFor(sys, await readReport(sys.name, 'hotspots'));
   const untested = []; const discipline = [];
   let untestedTotal = 0;
   for (const [stack, s] of Object.entries(r.stacks)) {
@@ -121,7 +114,10 @@ async function c6Groups(sys, readReport) {
   const breadthLabel = untested.length < untestedTotal
     ? `Untested source files — ${untested.length} of ${untestedTotal}`
     : 'Untested source files';
-  return [group('breadth', breadthLabel, null, untested), group('discipline', 'Coverage enforcement', null, discipline)];
+  return [
+    group('breadth', breadthLabel, null, rankPlaces(untested, hotspots, { useDependents })),
+    group('discipline', 'Coverage enforcement', null, discipline),
+  ];
 }
 
 async function c7Groups(sys, readReport) {

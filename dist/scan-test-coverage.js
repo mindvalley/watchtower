@@ -1623,7 +1623,20 @@ function relativizePaths(node) {
   return relativize(node);
 }
 
-module.exports = { relativize, relativizePaths };
+// Maps a location in an extracted Vue script back to its .vue file and line.
+// Longest match, so keys sharing a suffix ("src/Login.vue.ts" and
+// "components/src/Login.vue.ts") never collide.
+function vueSourceMapper(offsets) {
+  const entries = Object.entries(offsets || {});
+  return (it) => {
+    const matches = it.file ? entries.filter(([k]) => it.file.endsWith(k)) : [];
+    if (!matches.length) return it;
+    const [, { source, lineOffset }] = matches.reduce((a, b) => (a[0].length >= b[0].length ? a : b));
+    return { ...it, file: source, line: it.line != null ? (it.line - 1) + lineOffset : it.line };
+  };
+}
+
+module.exports = { relativize, relativizePaths, vueSourceMapper };
 
 
 /***/ }),
@@ -1664,7 +1677,8 @@ const { materialise } = __nccwpck_require__(639);
 const SYSTEM = process.env.SYSTEM;
 const { GH_TOKEN } = process.env;
 
-const SAMPLE_CAP = 20;
+// Every untested file is kept, so the findings can be ranked before any are cut.
+const SAMPLE_CAP = Infinity;
 const GRAPHIFY_TIMEOUT_MS = 5 * 60 * 1000;
 const FRONTEND_MIN_FILES = 5; // fewer than this => no meaningful FE surface => omit stack (N/A)
 

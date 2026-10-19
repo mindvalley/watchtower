@@ -1409,6 +1409,82 @@ module.exports = {
 
 /***/ }),
 
+/***/ 528:
+/***/ ((module) => {
+
+
+
+// Which stacks each stack-bound criterion can honestly measure. A stack not
+// handled here makes its scanner skip (emit no report), so the composition layer
+// records Pending rather than a false green. C4 (observability) and C6 (test
+// coverage) are now stack-agnostic and are NOT gated here — they scan every
+// stack and let absent evidence score an honest low. Only C2 remains gated.
+
+// C2 documented APIs dispositions:
+//   'elixir-ast' — score in-code Elixir schemas (Absinthe + phoenix_swagger, AST
+//                  parse via the elixir binary). The existing pilot path.
+//   'na'         — ruby: declared N/A (the Ruby pilot's existing state; kept unchanged
+//                  for parity — an apipie-emitted artifact re-score is a separate,
+//                  deliberate step, not this agnostic slice).
+//   'artifact'   — every other stack: recognize a committed API-description
+//                  artifact (OpenAPI JSON/YAML or GraphQL SDL) and measure it. If
+//                  no artifact is present, emit no report -> honest Pending (an
+//                  in-code-only API is "not measured", never a false green).
+function documentedApisDisposition(stack) {
+  if (stack === 'elixir') return 'elixir-ast';
+  if (stack === 'ruby') return 'na';
+  return 'artifact';
+}
+
+// C1 domain boundaries: whether the tree-sitter code graph is trustworthy enough
+// on this stack to grade cycles and module fan-out.
+//
+//   'ok'         — grade the graph-derived metrics.
+//   'unreliable' — measure and report them, but do NOT grade them. The scorer
+//                  drops these sub-metrics; if nothing else is scoreable the
+//                  criterion is INDETERMINATE (not Pending — we are not promising
+//                  to fix the extractor, and not a score we cannot defend).
+//
+// Measured against ground truth on 2026-07-29, not assumed:
+//   elixir — graphify 0.9.28/0.9.29 resolves an `alias` only when the module name
+//            is exactly two segments AND the file path is its literal lowercase
+//            (Foo.Bar -> foo/bar.ex). Three-plus segments (Foo.Bar.Baz) and
+//            snake_case (Foo.TwoWord -> two_word.ex) both silently fail, and
+//            real Elixir is overwhelmingly one of those. In one umbrella that
+//            produced 4 of 8 real cross-app dependencies, plus one edge pointing
+//            the wrong way — a pair reported with zero references while the real
+//            dependency in the opposite direction was missed. A cycle needs only
+//            one missing edge to disappear, so "zero cycles" is uninformative.
+//   js/ts  — 5 of 6 real code dependencies in a TypeScript monorepo; the misses
+//            eslint-config/typescript-config, consumed via tsconfig `extends`
+//            rather than imports, which a code graph is right to omit.
+// Ruby and Python are not separately measured; they keep the default until they
+// are, because withholding a grade needs evidence just as much as publishing one.
+function boundaryGraphDisposition(stack) {
+  return stack === 'elixir' ? 'unreliable' : 'ok';
+}
+
+// C6 test breadth: how a source file is paired with its test.
+//
+//   'imports'  — a test counts only when it is named for the file AND the code
+//                graph shows it importing the file.
+//   'filename' — a same-named test anywhere in the repo counts (the original
+//                file-presence proxy).
+//
+// 'imports' only for stacks whose test imports the graph has been shown to
+// resolve; the scan still falls back per repo when it does not (choosePairing).
+// Elixir under-resolves (see boundaryGraphDisposition) and Python src-layout
+// imports are not resolved, so both keep the filename rule.
+const IMPORT_PAIRED_STACKS = new Set(['frontend']);
+function testPairingDisposition(stack) {
+  return IMPORT_PAIRED_STACKS.has(stack) ? 'imports' : 'filename';
+}
+
+module.exports = { documentedApisDisposition, boundaryGraphDisposition, testPairingDisposition };
+
+
+/***/ }),
+
 /***/ 884:
 /***/ ((module) => {
 
@@ -1764,6 +1840,113 @@ module.exports = {
 
 /***/ }),
 
+/***/ 391:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+
+
+// Ranks the places under a remedial action (complex functions, untested files)
+// by how many files use them and how often they changed. Ordering only: no
+// score reads anything here.
+
+const { relativize } = __nccwpck_require__(754);
+const { isTestOrFixturePath, isNonSourcePath, SOURCE_EXT } = __nccwpck_require__(761);
+const { boundaryGraphDisposition } = __nccwpck_require__(528);
+
+const START_WITH_COUNT = 3;
+
+function changeCounts(revisions) {
+  const counts = new Map();
+  for (const r of revisions || []) {
+    for (const f of new Set(r.files)) counts.set(f, (counts.get(f) || 0) + 1);
+  }
+  return counts;
+}
+
+const isPlace = (f) => (SOURCE_EXT.test(f) || f.endsWith('.vue')) && !isNonSourcePath(f);
+
+// Tests importing a file say nothing about how widely the product relies on it.
+// A file that defines nothing (a barrel of re-exports) is not credited.
+function directDependents(deps, definers = null) {
+  const counts = new Map();
+  for (const [source, targets] of deps || []) {
+    if (isTestOrFixturePath(source)) continue;
+    for (const t of targets) {
+      if (definers && !definers.has(t)) continue;
+      counts.set(t, (counts.get(t) || 0) + 1);
+    }
+  }
+  return counts;
+}
+
+// graphify gives every file one node of its own; any further node is something
+// the file defines.
+function definingFiles(graph) {
+  const nodes = new Map();
+  for (const n of (graph && graph.nodes) || []) {
+    if (n.source_file) nodes.set(n.source_file, (nodes.get(n.source_file) || 0) + 1);
+  }
+  return new Set([...nodes].filter(([, count]) => count > 1).map(([f]) => f));
+}
+
+function buildHotspots({ deps = null, definers = null, revisions = null, windowDays, graphUnavailable = null }) {
+  const dependents = directDependents(deps, definers);
+  const changes = changeCounts(revisions);
+  const files = {};
+  for (const f of [...new Set([...dependents.keys(), ...changes.keys()])].filter(isPlace).sort()) {
+    files[f] = { dependents: dependents.get(f) || 0, changes: changes.get(f) || 0 };
+  }
+  return {
+    window_days: windowDays,
+    graph: deps ? 'built' : graphUnavailable || 'not built',
+    history: revisions ? 'read' : 'unavailable',
+    files,
+  };
+}
+
+function weightOf(hotspots, file, useDependents) {
+  const h = hotspots.files[relativize(file)] || {};
+  return ((useDependents ? h.dependents || 0 : 0) + 1) * ((h.changes || 0) + 1);
+}
+
+function rankPlaces(items, hotspots, { useDependents, fileOf = (it) => it.file } = {}) {
+  if (!hotspots) return items;
+  return items
+    .map((item, i) => ({ item, i, w: weightOf(hotspots, fileOf(item), useDependents) }))
+    .sort((a, b) => b.w - a.w || a.i - b.i)
+    .map((x) => x.item);
+}
+
+// "Used by" counts come from the code graph, trusted on the same terms as C1.
+function rankingFor(sys, hotspots) {
+  return {
+    hotspots: hotspots || null,
+    useDependents: !!hotspots && hotspots.graph === 'built' && boundaryGraphDisposition(sys.stack) === 'ok',
+  };
+}
+
+// A file with no dependents and no changes carries no signal and is never named.
+function startWith(rankedItems, hotspots, { useDependents, fileOf = (it) => it.file } = {}) {
+  if (!hotspots) return null;
+  const files = [];
+  for (const item of rankedItems) {
+    const f = relativize(fileOf(item));
+    if (!f || files.includes(f) || weightOf(hotspots, f, useDependents) <= 1) continue;
+    files.push(f);
+    if (files.length === START_WITH_COUNT) break;
+  }
+  if (!files.length) return null;
+  const basis = useDependents ? 'the most used and most changed' : 'the most changed';
+  return `Start with ${basis}: ${files.join(', ')}.`;
+}
+
+module.exports = {
+  changeCounts, directDependents, definingFiles, buildHotspots, rankPlaces, rankingFor, startWith, START_WITH_COUNT,
+};
+
+
+/***/ }),
+
 /***/ 754:
 /***/ ((module) => {
 
@@ -1803,7 +1986,20 @@ function relativizePaths(node) {
   return relativize(node);
 }
 
-module.exports = { relativize, relativizePaths };
+// Maps a location in an extracted Vue script back to its .vue file and line.
+// Longest match, so keys sharing a suffix ("src/Login.vue.ts" and
+// "components/src/Login.vue.ts") never collide.
+function vueSourceMapper(offsets) {
+  const entries = Object.entries(offsets || {});
+  return (it) => {
+    const matches = it.file ? entries.filter(([k]) => it.file.endsWith(k)) : [];
+    if (!matches.length) return it;
+    const [, { source, lineOffset }] = matches.reduce((a, b) => (a[0].length >= b[0].length ? a : b));
+    return { ...it, file: source, line: it.line != null ? (it.line - 1) + lineOffset : it.line };
+  };
+}
+
+module.exports = { relativize, relativizePaths, vueSourceMapper };
 
 
 /***/ }),
@@ -1829,12 +2025,13 @@ const {
   discoverModules, buildModuleGraph, findModuleCycles, computeFanOut,
   detectExternalTargets, moduleForFile, SOURCE_EXT,
   isNonSourcePath, isTestOrFixturePath,
-  moduleGraphCoverage, MODULE_GRAPH_COVERAGE_THRESHOLD,
+  moduleGraphCoverage, MODULE_GRAPH_COVERAGE_THRESHOLD, fileDependencies,
 } = __nccwpck_require__(761);
 const {
   parseGitLog, modulesPerRevision, couplingPairs, CODE_MAAT_DEFAULTS,
 } = __nccwpck_require__(187);
 const { declaredDependencyPairs, pairKey } = __nccwpck_require__(884);
+const { buildHotspots, definingFiles } = __nccwpck_require__(391);
 
 const GRAPHIFY_VERSION = '0.9.28';
 const MAX_CYCLES = 500;
@@ -1909,7 +2106,19 @@ function indeterminateReport(reason, discovery, extra = {}) {
 // are repo-relative, and the copy preserves them, so the two line up. A target
 // that is not a git repository at all passes null and lands in the catch below,
 // which is the honest answer: not measured.
-function collectChangeCoupling(repoDir, discovery, files, readText, historyDir = repoDir) {
+function readHistory(historyDir) {
+  try {
+    if (!historyDir) throw new Error('no history location');
+    return parseGitLog(sh('git', [
+      'log', '--no-merges', `--since=${COUPLING_WINDOW_DAYS} days ago`,
+      '--format=commit%x09%H', '--name-only',
+    ], { cwd: historyDir, stdio: ['ignore', 'pipe', 'pipe'] }));
+  } catch {
+    return null;
+  }
+}
+
+function collectChangeCoupling(discovery, files, readText, revisions) {
   const base = {
     window_days: COUPLING_WINDOW_DAYS,
     thresholds: CODE_MAAT_DEFAULTS,
@@ -1922,20 +2131,10 @@ function collectChangeCoupling(repoDir, discovery, files, readText, historyDir =
     violations: [],
   };
 
-  let log;
-  try {
-    if (!historyDir) throw new Error('no history location');
-    log = sh('git', [
-      'log', '--no-merges', `--since=${COUPLING_WINDOW_DAYS} days ago`,
-      '--format=commit%x09%H', '--name-only',
-    ], { cwd: historyDir, stdio: ['ignore', 'pipe', 'pipe'] });
-  } catch {
-    // No history available: a bare depth-1 clone that could not be deepened, or
-    // a local folder that is not a git repository.
-    return { ...base, unavailable: 'git history for the window could not be read' };
-  }
+  // No history available: a bare depth-1 clone that could not be deepened, or
+  // a local folder that is not a git repository.
+  if (!revisions) return { ...base, unavailable: 'git history for the window could not be read' };
 
-  const revisions = parseGitLog(log);
   const mapped = modulesPerRevision(revisions, discovery.modules);
   const { pairs, qualifying_modules: qualifying, total_revisions: total } = couplingPairs(mapped.revisions);
 
@@ -1960,15 +2159,28 @@ function collectChangeCoupling(repoDir, discovery, files, readText, historyDir =
   };
 }
 
+// Returns the C1 report and, beside it, the per-file ranking of places
+// (place-ranking.js), which reuses this scan's graph and history.
 function scanRepo(repoDir, { historyDir = repoDir } = {}) {
   const files = listFiles(repoDir);
   const readText = (p) => {
     try { return fs.readFileSync(path.join(repoDir, p), 'utf8'); } catch { return null; }
   };
+  const revisions = readHistory(historyDir);
+  const hotspotsOf = (graph, graphUnavailable) => buildHotspots({
+    deps: graph ? fileDependencies(graph) : null,
+    definers: graph ? definingFiles(graph) : null,
+    revisions,
+    windowDays: COUPLING_WINDOW_DAYS,
+    graphUnavailable,
+  });
 
   const discovery = discoverModules({ files, readText });
   if (discovery.kind === 'indeterminate') {
-    return indeterminateReport(discovery.reason, discovery);
+    return {
+      report: indeterminateReport(discovery.reason, discovery),
+      hotspots: hotspotsOf(null, 'modules not discoverable, so the graph was not built'),
+    };
   }
 
   sh('graphify', ['extract', repoDir, '--code-only'], {
@@ -2029,8 +2241,8 @@ function scanRepo(repoDir, { historyDir = repoDir } = {}) {
     // needs history and manifests, not the graph, so it is still measurable and
     // the scorer can grade the criterion on it alone. Without this, a repo whose
     // graph is degenerate loses a signal we actually have.
-    report.change_coupling = collectChangeCoupling(repoDir, discovery, files, readText, historyDir);
-    return report;
+    report.change_coupling = collectChangeCoupling(discovery, files, readText, revisions);
+    return { report, hotspots: hotspotsOf(graph) };
   }
 
   const cycles = findModuleCycles(edges, { maxCycles: MAX_CYCLES, directions });
@@ -2059,7 +2271,7 @@ function scanRepo(repoDir, { historyDir = repoDir } = {}) {
 
   const fanOut = computeFanOut(edges, discovery.modules, externalByModule);
 
-  return {
+  const report = {
     applicable: true,
     indeterminate: null,
     module_discovery: {
@@ -2069,7 +2281,7 @@ function scanRepo(repoDir, { historyDir = repoDir } = {}) {
     },
     cycles,
     fan_out: fanOut,
-    change_coupling: collectChangeCoupling(repoDir, discovery, files, readText, historyDir),
+    change_coupling: collectChangeCoupling(discovery, files, readText, revisions),
     external_targets: externalByModule,
     external_target_detection: {
       files_scanned: filesScannedForTargets,
@@ -2079,6 +2291,7 @@ function scanRepo(repoDir, { historyDir = repoDir } = {}) {
     },
     graph: graphAudit,
   };
+  return { report, hotspots: hotspotsOf(graph) };
 }
 
 function main() {
@@ -2117,9 +2330,10 @@ function main() {
       }
     }
 
-    const report = scanRepo(tree.dir, { historyDir: tree.historyDir });
+    const { report, hotspots } = scanRepo(tree.dir, { historyDir: tree.historyDir });
     const outDir = reportsDir(system);
     fs.writeFileSync(path.join(outDir, 'boundaries.json'), `${JSON.stringify(report, null, 2)}\n`);
+    fs.writeFileSync(path.join(outDir, 'hotspots.json'), `${JSON.stringify(hotspots)}\n`);
     process.stdout.write(
       `boundaries: ${system} modules=${report.module_discovery.modules.length} `
       + `edges=${report.graph.edges} cycles=${report.cycles.count}`

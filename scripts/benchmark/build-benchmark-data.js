@@ -17,6 +17,8 @@ const { scoreBoundaries } = require('./score-boundaries');
 const { boundaryGraphDisposition } = require('./criterion-stacks');
 const { buildSystemEntry, assembleBenchmark } = require('./assemble-benchmark');
 const { createAllowanceSet } = require('./allowances');
+const { vueSourceMapper } = require('./repo-paths');
+const { rankPlaces, rankingFor, startWith } = require('./place-ranking');
 
 // Score C8 only when the simplicity scan actually ran for this system (its meta
 // file is present). Otherwise return null so C8 stays Pending — never score an
@@ -61,6 +63,9 @@ async function scoreC8({ sys, readReport, assessedAt, allowComplexity = null }) 
   // two-thirds of the code is more protective than one covering a twentieth.
   const gates = entries.filter((e) => e.gate).map((e) => ({ language: e.language, loc: e.loc || 0, ...e.gate }));
   const dup = parseDuplication(await readReport(sys.name, 'jscpd'));
+  const toVueSource = vueSourceMapper(await readReport(sys.name, 'vue-offsets'));
+  const ranking = rankingFor(sys, await readReport(sys.name, 'hotspots'));
+  const ranked = rankPlaces(items.map(toVueSource), ranking.hotspots, ranking);
   return scoreSimplicity({
     complexity: { violations, loc: meta.loc || 0, allowed },
     duplication: dup,
@@ -70,6 +75,7 @@ async function scoreC8({ sys, readReport, assessedAt, allowComplexity = null }) 
     unmeasured: meta.unmeasured || [],
     skippedImmaterial: meta.skipped_immaterial || [],
     assessedAt,
+    startWith: startWith(ranked, ranking.hotspots, ranking),
   });
 }
 
@@ -102,7 +108,10 @@ async function scoreC2({ sys, readReport, assessedAt }) {
 async function scoreC6({ sys, readReport, assessedAt }) {
   const report = await readReport(sys.name, 'test-coverage');
   if (!report) return null;
-  return scoreTestCoverage(report, { assessedAt });
+  const ranking = rankingFor(sys, await readReport(sys.name, 'hotspots'));
+  const untested = Object.values(report.stacks || {}).flatMap((s) => (s.untested_samples || []).map((file) => ({ file })));
+  const ranked = rankPlaces(untested, ranking.hotspots, ranking);
+  return scoreTestCoverage(report, { assessedAt, startWith: startWith(ranked, ranking.hotspots, ranking) });
 }
 
 // Score C1 only when the boundary scan ran. An indeterminate discovery returns
