@@ -176,7 +176,6 @@ test('the publisher recorded is the verified one, and the body cannot set it', (
   })();
 });
 
-// --- red-status alerts ------------------------------------------------------
 
 const redBody = {
   ...goodBody, score: 20, colour: 'red', criteria: { '2': { score: 1 } },

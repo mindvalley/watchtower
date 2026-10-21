@@ -89,3 +89,24 @@ test('refuses an unknown system rather than publishing an empty one', () => {
     /unknown system/,
   );
 });
+
+test('carries the owners named in the config', () => {
+  const p = buildIngestPayload({ benchmark: BENCHMARK, findings: null, systemKey: 'delta', owners: ['U0123ABCD', 'S0123ABCD'] });
+  assert.deepStrictEqual(p.owners, ['U0123ABCD', 'S0123ABCD']);
+});
+
+test('no owners means no owners field, so older dashboards see the payload they always saw', () => {
+  for (const owners of [undefined, []]) {
+    const p = buildIngestPayload({ benchmark: BENCHMARK, findings: null, systemKey: 'delta', owners });
+    assert.ok(!('owners' in p));
+  }
+});
+
+test('refuses owners that are not Slack member or user-group ids, naming the system', () => {
+  for (const owners of [['@ana'], 'U0123ABCD', ['<@U0123ABCD>']]) {
+    assert.throws(
+      () => buildIngestPayload({ benchmark: BENCHMARK, findings: null, systemKey: 'delta', owners }),
+      /delta.*owners/,
+    );
+  }
+});
