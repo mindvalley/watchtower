@@ -205,7 +205,7 @@ test('a system dropping into red alerts once, naming its owners', async () => {
   assert.strictEqual(alerts.length, 1);
   assert.deepStrictEqual(alerts[0], {
     kind: 'dropped', system: 'alpha', before: { score: 63, colour: 'amber' },
-    after: { score: 20, colour: 'red' }, owners: ['U0123ABCD'],
+    after: { score: 20, colour: 'red', criteria: { '2': { score: 1 } } }, owners: ['U0123ABCD'],
   });
 });
 

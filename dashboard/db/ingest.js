@@ -242,7 +242,7 @@ async function handleIngest(req, res, {
     result: 'ok', repository: claims.repository, system_key: entry.system_key, ...counts,
   });
   if (alert && before !== undefined) {
-    const after = { score: req.body.score, colour: req.body.colour };
+    const after = { score: req.body.score, colour: req.body.colour, criteria: req.body.criteria };
     const kind = redTransition(before ? before.colour : null, after.colour);
     if (kind) {
       try {

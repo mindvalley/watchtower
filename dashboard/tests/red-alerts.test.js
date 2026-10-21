@@ -2,7 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const {
-  redTransition, mention, alertText, isOwnerId, sendSlack,
+  redTransition, mention, alertText, isOwnerId, sendSlack, redCause,
 } = require('../db/red-alerts');
 
 test('a system that turns red has dropped', () => {
@@ -93,4 +93,69 @@ test('sendSlack gives up after its time limit', { timeout: 1000 }, async () => {
     sendSlack('https://hooks.example.test/x', 'hello', { fetchImpl, timeoutMs: 20 }),
     { name: 'AbortError' },
   );
+});
+
+const NAMES = { 6: 'Test Coverage', 8: 'Codebase Simplicity', 9: 'Security Posture' };
+
+test('a capped system names the criterion with the critical finding and its first action', () => {
+  const cause = redCause(
+    { 6: { score: 3 }, 9: { score: 4 } },
+    { 6: { score: 3 }, 9: { score: 2, critical: true, actions: ['Remove the exposed secret.', 'Add a hook.'] } },
+    NAMES,
+  );
+  assert.deepStrictEqual(cause, { name: 'Security Posture', reason: 'critical', action: 'Remove the exposed secret.' });
+});
+
+test('a slide with no cap names the criterion that fell furthest since the last reading', () => {
+  const cause = redCause(
+    { 6: { score: 3 }, 8: { score: 4 } },
+    { 6: { score: 2.5 }, 8: { score: 1.5, actions: ['Split the complex functions.'] } },
+    NAMES,
+  );
+  assert.deepStrictEqual(cause, {
+    name: 'Codebase Simplicity', reason: 'fell', from: 4, to: 1.5, action: 'Split the complex functions.',
+  });
+});
+
+test('with no earlier reading, the weakest criterion is named', () => {
+  const cause = redCause(null, { 6: { score: 0.5, actions: ['Add tests.'] }, 8: { score: 2 } }, NAMES);
+  assert.deepStrictEqual(cause, { name: 'Test Coverage', reason: 'weakest', to: 0.5, action: 'Add tests.' });
+});
+
+test('if nothing fell, the weakest criterion is named', () => {
+  const cause = redCause({ 6: { score: 1 } }, { 6: { score: 1 }, 8: { score: 0.5 } }, NAMES);
+  assert.strictEqual(cause.name, 'Codebase Simplicity');
+  assert.strictEqual(cause.reason, 'weakest');
+  assert.strictEqual(cause.action, null);
+});
+
+test('an unknown criterion id is shown by its id rather than dropped', () => {
+  const cause = redCause(null, { 99: { score: 0 } }, NAMES);
+  assert.strictEqual(cause.name, 'criterion 99');
+});
+
+test('the drop message carries the cause and the fix', () => {
+  const text = alertText({
+    kind: 'dropped', system: 'alpha', before: { score: 63 }, after: { score: 25 }, owners: [],
+    cause: { name: 'Security Posture', reason: 'critical', action: 'Remove the exposed secret.' },
+  });
+  assert.match(text, /Cause: \*Security Posture\* has a critical finding, which caps the score\./);
+  assert.match(text, /Fix: Remove the exposed secret\./);
+});
+
+test('a slide reads as the criterion that fell, with its scores', () => {
+  const text = alertText({
+    kind: 'dropped', system: 'alpha', before: { score: 45 }, after: { score: 38 }, owners: [],
+    cause: { name: 'Codebase Simplicity', reason: 'fell', from: 4, to: 1.5, action: null },
+  });
+  assert.match(text, /Cause: \*Codebase Simplicity\* fell furthest \(4 → 1\.5 of 5\)\./);
+  assert.doesNotMatch(text, /Fix:/);
+});
+
+test('a recovery carries no cause even if one is passed', () => {
+  const text = alertText({
+    kind: 'recovered', system: 'alpha', before: { score: 38 }, after: { score: 55 }, owners: [],
+    cause: { name: 'Security Posture', reason: 'critical', action: 'x' },
+  });
+  assert.doesNotMatch(text, /Cause:|Fix:/);
 });

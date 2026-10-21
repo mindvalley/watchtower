@@ -10,7 +10,8 @@ const { makeVerifier } = require('./db/ingest-auth');
 const { buildAllowlist } = require('./db/allowlist');
 const { handleIngest } = require('./db/ingest');
 const { ingestConfig, alertsConfig, displayNames } = require('./db/config');
-const { alertText, sendSlack } = require('./db/red-alerts');
+const { alertText, redCause, sendSlack } = require('./db/red-alerts');
+const { criteriaDocs } = require('./db/criteria');
 const { criteriaIds, criteriaSlugs } = require('./db/criteria');
 
 const PUBLIC = path.join(__dirname, 'public');
@@ -90,6 +91,10 @@ function pgProvider() {
   };
 }
 
+function criterionNames() {
+  return Object.fromEntries(criteriaDocs().map((c) => [c.id, c.name]));
+}
+
 function createApp(deps = {}) {
   const provider = deps.provider || pgProvider();
   const app = express();
@@ -106,7 +111,11 @@ function createApp(deps = {}) {
   const alerts = deps.alert ? { enabled: true } : alertsConfig();
   const readCurrent = deps.readCurrent || (alerts.enabled ? (key) => fetchCurrentReading(getPool(), key) : null);
   const alert = deps.alert
-    || (alerts.enabled ? (a) => sendSlack(alerts.webhookUrl, alertText({ ...a, boardUrl: alerts.boardUrl })) : null);
+    || (alerts.enabled ? (a) => sendSlack(alerts.webhookUrl, alertText({
+      ...a,
+      boardUrl: alerts.boardUrl,
+      cause: redCause(a.before && a.before.criteria, a.after.criteria, criterionNames()),
+    })) : null);
 
   // Say which it is, at boot, once. A publish endpoint that is quietly off is
   // the failure mode this whole arrangement is most likely to produce, and the
