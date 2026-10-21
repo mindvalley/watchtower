@@ -345,8 +345,14 @@ async function systemExists(pool, systemKey) {
   return rows.length > 0;
 }
 
+async function fetchCurrentReading(pool, systemKey) {
+  const { rows } = await pool.query('SELECT score, colour FROM systems WHERE system_key = $1', [systemKey]);
+  return rows.length ? { score: rows[0].score, colour: rows[0].colour } : null;
+}
+
 module.exports = {
   upsertAll,
+  fetchCurrentReading,
   replaceSystem,
   fetchAll,
   fetchBenchmarkRows,

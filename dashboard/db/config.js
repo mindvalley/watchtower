@@ -77,4 +77,12 @@ function displayNames() {
   return setting ? setting.data : null;
 }
 
-module.exports = { ingestConfig, displayNames, readJsonSetting };
+// Red-status alerts are off unless a Slack incoming-webhook address is supplied.
+// The address is a secret: anyone holding it can post to the channel.
+function alertsConfig(env = process.env) {
+  const webhookUrl = (env.WATCHTOWER_SLACK_WEBHOOK_URL || '').trim();
+  if (!webhookUrl) return { enabled: false };
+  return { enabled: true, webhookUrl, boardUrl: (env.WATCHTOWER_PUBLIC_URL || '').trim() || null };
+}
+
+module.exports = { ingestConfig, alertsConfig, displayNames, readJsonSetting };

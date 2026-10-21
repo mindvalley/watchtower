@@ -3,13 +3,14 @@ const path = require('path');
 const fs = require('fs');
 const { getPool } = require('./db/pool');
 const {
-  fetchBenchmarkRows, fetchFindingsRows, fetchHistoryRows, replaceSystem, systemExists, HISTORY_START,
+  fetchBenchmarkRows, fetchFindingsRows, fetchCurrentReading, fetchHistoryRows, replaceSystem, systemExists, HISTORY_START,
 } = require('./db/repo');
 const { rowsToBenchmark, rowsToFindings, rowsToHistory } = require('./db/model');
 const { makeVerifier } = require('./db/ingest-auth');
 const { buildAllowlist } = require('./db/allowlist');
 const { handleIngest } = require('./db/ingest');
-const { ingestConfig, displayNames } = require('./db/config');
+const { ingestConfig, alertsConfig, displayNames } = require('./db/config');
+const { alertText, sendSlack } = require('./db/red-alerts');
 const { criteriaIds, criteriaSlugs } = require('./db/criteria');
 
 const PUBLIC = path.join(__dirname, 'public');
@@ -102,6 +103,10 @@ function createApp(deps = {}) {
   const ingest = deps.ingest
     || ((deps.verifier && deps.allowlist) ? { enabled: true } : ingestConfig());
   const write = deps.write || ((rows) => replaceSystem(getPool(), rows));
+  const alerts = deps.alert ? { enabled: true } : alertsConfig();
+  const readCurrent = deps.readCurrent || (alerts.enabled ? (key) => fetchCurrentReading(getPool(), key) : null);
+  const alert = deps.alert
+    || (alerts.enabled ? (a) => sendSlack(alerts.webhookUrl, alertText({ ...a, boardUrl: alerts.boardUrl })) : null);
 
   // Say which it is, at boot, once. A publish endpoint that is quietly off is
   // the failure mode this whole arrangement is most likely to produce, and the
@@ -110,13 +115,16 @@ function createApp(deps = {}) {
     console.log(ingest.enabled
       ? 'ingest: ENABLED'
       : `ingest: DISABLED — ${ingest.reason}. Publishes will be refused with 503.`);
+    console.log(alerts.enabled ? 'red alerts: ENABLED' : 'red alerts: off (WATCHTOWER_SLACK_WEBHOOK_URL not set)');
   }
 
   if (ingest.enabled) {
     const verifier = deps.verifier || makeVerifier({ audience: ingest.audience });
     const allowlist = deps.allowlist || buildAllowlist(ingest.allowlist);
     app.post('/ingest', ingestBodyParser(), (req, res) =>
-      handleIngest(req, res, { verifier, allowlist, knownCriteria: CRITERIA_IDS, write }));
+      handleIngest(req, res, {
+        verifier, allowlist, knownCriteria: CRITERIA_IDS, write, readCurrent, alert,
+      }));
   } else {
     app.post('/ingest', (req, res) => res.status(503).json({
       error: 'ingest is not configured on this installation',

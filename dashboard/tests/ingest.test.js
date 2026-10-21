@@ -175,3 +175,97 @@ test('the publisher recorded is the verified one, and the body cannot set it', (
     assert.notStrictEqual(writes[0].publishedBy, 'someone-else/watchtower');
   })();
 });
+
+// --- red-status alerts ------------------------------------------------------
+
+const redBody = {
+  ...goodBody, score: 20, colour: 'red', criteria: { '2': { score: 1 } },
+  owners: ['U0123ABCD'],
+};
+
+function alertingApp({ current, alert, write } = {}) {
+  const alerts = [];
+  const writes = [];
+  const app = createApp({
+    provider: { getBenchmark: async () => ({}), getFindings: async () => ({}) },
+    verifier: okVerifier,
+    allowlist,
+    write: write || (async (rows) => { writes.push(rows); }),
+    readCurrent: async () => (typeof current === 'function' ? current() : current),
+    alert: alert || (async (a) => { alerts.push(a); }),
+  });
+  return { app, alerts, writes };
+}
+
+const post = (app, body) => request(app).post('/ingest').set('X-Benchmark-Ingest-Token', 't').send(body);
+
+test('a system dropping into red alerts once, naming its owners', async () => {
+  const { app, alerts } = alertingApp({ current: { score: 63, colour: 'amber' } });
+  const res = await post(app, redBody);
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(alerts.length, 1);
+  assert.deepStrictEqual(alerts[0], {
+    kind: 'dropped', system: 'alpha', before: { score: 63, colour: 'amber' },
+    after: { score: 20, colour: 'red' }, owners: ['U0123ABCD'],
+  });
+});
+
+test('a system that stays red does not alert again', async () => {
+  const { app, alerts } = alertingApp({ current: { score: 25, colour: 'red' } });
+  await post(app, redBody);
+  assert.strictEqual(alerts.length, 0);
+});
+
+test('a red system climbing out alerts as recovered', async () => {
+  const { app, alerts } = alertingApp({ current: { score: 20, colour: 'red' } });
+  await post(app, goodBody);
+  assert.strictEqual(alerts.length, 1);
+  assert.strictEqual(alerts[0].kind, 'recovered');
+  assert.deepStrictEqual(alerts[0].owners, []);
+});
+
+test('a failed alert never fails the publish', async () => {
+  const { app, writes } = alertingApp({
+    current: { score: 63, colour: 'amber' },
+    alert: async () => { throw new Error('slack down'); },
+  });
+  const res = await post(app, redBody);
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(writes.length, 1);
+});
+
+test('no alert when the write itself fails', async () => {
+  const { app, alerts } = alertingApp({
+    current: { score: 63, colour: 'amber' },
+    write: async () => { throw new Error('db down'); },
+  });
+  const res = await post(app, redBody);
+  assert.strictEqual(res.status, 500);
+  assert.strictEqual(alerts.length, 0);
+});
+
+test('if the earlier reading cannot be read, the publish still lands and nothing alerts', async () => {
+  const { app, alerts, writes } = alertingApp({ current: () => { throw new Error('read failed'); } });
+  const res = await post(app, redBody);
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(writes.length, 1);
+  assert.strictEqual(alerts.length, 0);
+});
+
+test('owners are optional', async () => {
+  const { owners, ...noOwners } = redBody;
+  const { app, alerts } = alertingApp({ current: null });
+  const res = await post(app, noOwners);
+  assert.strictEqual(res.status, 200);
+  assert.deepStrictEqual(alerts[0].owners, []);
+});
+
+test('400 on owners that are not Slack ids, and nothing is written', async () => {
+  for (const owners of [['@ana'], 'U0123ABCD', [42], Array(26).fill('U0123ABCD')]) {
+    const { app, writes } = alertingApp({ current: null });
+    const res = await post(app, { ...redBody, owners });
+    assert.strictEqual(res.status, 400, JSON.stringify(owners).slice(0, 40));
+    assert.match(res.body.reason, /owners/);
+    assert.strictEqual(writes.length, 0);
+  }
+});
