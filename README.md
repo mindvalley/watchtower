@@ -229,7 +229,10 @@ cd dashboard && npm run load -- path/to/data --config path/to/watchtower.config.
 ### Red-status alerts
 
 A dashboard with a Slack webhook configured posts to Slack when a system drops
-into red, and again when it recovers. To have a system's owners tagged, list
+into red, and again when it recovers. A drop names its cause and the first
+remedial action: the criterion with a critical finding when the score is capped,
+otherwise the criterion that fell furthest since the last reading (or the
+weakest, on a first reading). To have a system's owners tagged, list
 their Slack member ids (`U…`) or user-group ids (`S…`) in its config entry:
 
 ```json
