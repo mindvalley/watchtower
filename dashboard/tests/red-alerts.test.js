@@ -84,9 +84,13 @@ test('sendSlack throws on a refused post, without echoing the webhook address', 
   );
 });
 
-test('sendSlack gives up after its time limit', async () => {
+test('sendSlack gives up after its time limit', { timeout: 1000 }, async () => {
   const fetchImpl = (url, init) => new Promise((resolve, reject) => {
-    init.signal.addEventListener('abort', () => reject(new Error('aborted')));
+    if (!init.signal) return;
+    init.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
   });
-  await assert.rejects(sendSlack('https://hooks.example.test/x', 'hello', { fetchImpl, timeoutMs: 20 }));
+  await assert.rejects(
+    sendSlack('https://hooks.example.test/x', 'hello', { fetchImpl, timeoutMs: 20 }),
+    { name: 'AbortError' },
+  );
 });
