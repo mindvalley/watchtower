@@ -7,6 +7,9 @@
 // criteria it arrives with. See validateCompositeAgreesWithCriteria for why an
 // envelope check alone cannot tell the old /5 scale from the new /100 one.
 const { compositeOf } = require('./composite');
+const { isOwnerId, redTransition } = require('./red-alerts');
+
+const MAX_OWNERS = 25;
 
 // Per-criterion cap. Measured against the committed data rather than chosen:
 // the largest single findings payload in a real fleet of eleven was 809KB, so
@@ -137,6 +140,11 @@ function validatePayload(body, { knownCriteria }) {
   if (agreeErr) return { ok: false, reason: agreeErr };
   const fErr = validateMap(body.findings, 'findings', knownCriteria);
   if (fErr) return { ok: false, reason: fErr };
+  if (body.owners !== undefined) {
+    if (!Array.isArray(body.owners) || body.owners.length > MAX_OWNERS || !body.owners.every(isOwnerId)) {
+      return { ok: false, reason: `owners must be a list of at most ${MAX_OWNERS} Slack member or user-group ids` };
+    }
+  }
   return { ok: true };
 }
 
@@ -169,7 +177,9 @@ function audit(fields) {
   try { console.log(JSON.stringify({ event: 'ingest', ...fields })); } catch (_) { /* never throw from audit */ }
 }
 
-async function handleIngest(req, res, { verifier, allowlist, knownCriteria, write }) {
+async function handleIngest(req, res, {
+  verifier, allowlist, knownCriteria, write, readCurrent, alert,
+}) {
   let claims;
   try {
     const token = req.get('X-Benchmark-Ingest-Token');
@@ -207,6 +217,13 @@ async function handleIngest(req, res, { verifier, allowlist, knownCriteria, writ
     return res.status(400).json({ error: 'invalid payload', reason: check.reason });
   }
 
+  let before;
+  try {
+    before = readCurrent ? await readCurrent(entry.system_key) : undefined;
+  } catch (err) {
+    audit({ result: 'alert-skipped', repository: claims.repository, system_key: entry.system_key, reason: err.message });
+  }
+
   const rows = payloadToRows(entry, req.body);
   // WHO published this, from the verified claim rather than the body. It is the
   // same value the allowlist just authorised against, so a watchtower cannot
@@ -224,6 +241,17 @@ async function handleIngest(req, res, { verifier, allowlist, knownCriteria, writ
   audit({
     result: 'ok', repository: claims.repository, system_key: entry.system_key, ...counts,
   });
+  if (alert && before !== undefined) {
+    const after = { score: req.body.score, colour: req.body.colour, criteria: req.body.criteria };
+    const kind = redTransition(before ? before.colour : null, after.colour);
+    if (kind) {
+      try {
+        await alert({ kind, system: entry.system_key, before, after, owners: req.body.owners || [] });
+      } catch (err) {
+        audit({ result: 'alert-failed', repository: claims.repository, system_key: entry.system_key, reason: err.message });
+      }
+    }
+  }
   return res.status(200).json({ system_key: entry.system_key, ...counts });
 }
 

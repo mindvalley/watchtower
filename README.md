@@ -226,6 +226,24 @@ To see those results on a board, run the dashboard locally and load them:
 cd dashboard && npm run load -- path/to/data --config path/to/watchtower.config.json
 ```
 
+### Red-status alerts
+
+A dashboard with a Slack webhook configured posts to Slack when a system drops
+into red, and again when it recovers. A drop names its cause and the first
+remedial action: the criterion with a critical finding when the score is capped,
+otherwise the criterion that fell furthest since the last reading (or the
+weakest, on a first reading). To have a system's owners tagged, list
+their Slack member ids (`U…`) or user-group ids (`S…`) in its config entry:
+
+```json
+"systems": {
+  "billing": { "repo": "acme/billing", "stack": "frontend", "owners": ["U0123ABCD", "S0456EFGH"] }
+}
+```
+
+Owners travel with each publish, so the team that owns the config decides who is
+tagged. A system with no owners still alerts, untagged.
+
 ### Allowances
 
 See [guides/allowances.md](guides/allowances.md).

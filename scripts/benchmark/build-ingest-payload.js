@@ -15,7 +15,17 @@
  * The pure builder is here; the CLI edge at the bottom only does file I/O.
  */
 
-function buildIngestPayload({ benchmark, findings, systemKey }) {
+const OWNER_ID = /^[UWS][A-Z0-9]{8,11}$/;
+
+function checkOwners(owners, systemKey) {
+  if (owners === undefined) return [];
+  if (!Array.isArray(owners) || !owners.every((o) => typeof o === 'string' && OWNER_ID.test(o))) {
+    throw new Error(`'${systemKey}' owners must be a list of Slack member or user-group ids, like "U0123ABCD"`);
+  }
+  return owners;
+}
+
+function buildIngestPayload({ benchmark, findings, systemKey, owners }) {
   const entry = benchmark && benchmark.systems && benchmark.systems[systemKey];
   if (!entry) throw new Error(`unknown system '${systemKey}' — not in benchmark.json`);
 
@@ -28,7 +38,10 @@ function buildIngestPayload({ benchmark, findings, systemKey }) {
     throw new Error(`'${systemKey}' has no criteria — refusing to publish a payload that would blank it`);
   }
 
+  const ownerIds = checkOwners(owners, systemKey);
+
   return {
+    ...(ownerIds.length ? { owners: ownerIds } : {}),
     // Names the system being written. The allowlist decides whether the calling
     // repo is permitted to write it — a watchtower repo may write its own org's
     // systems and no others.

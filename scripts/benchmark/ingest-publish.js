@@ -64,7 +64,8 @@ if (require.main === module) {
   const { WATCHTOWER_URL, IAP_ID_TOKEN, INGEST_TOKEN } = process.env;
 
   async function main() {
-    const keys = systemsToPublish(loadConfig(), readManifest(reportsRoot()));
+    const config = loadConfig();
+    const keys = systemsToPublish(config, readManifest(reportsRoot()));
 
     if (keys.length === 0) {
       console.log('Nothing this run assembled publishes to a database — nothing to post.');
@@ -90,6 +91,7 @@ if (require.main === module) {
           benchmark,
           findings: fs.existsSync(findingsPath) ? read(`findings-${systemKey}.json`) : null,
           systemKey,
+          owners: config.systems[systemKey]?.owners,
         });
 
         const res = await fetch(`${WATCHTOWER_URL}/ingest`, {
