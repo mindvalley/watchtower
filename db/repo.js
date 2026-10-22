@@ -345,8 +345,22 @@ async function systemExists(pool, systemKey) {
   return rows.length > 0;
 }
 
+async function fetchCurrentReading(pool, systemKey) {
+  const { rows } = await pool.query(
+    `SELECT s.score, s.colour, cs.criterion_id, cs.payload
+     FROM systems s LEFT JOIN criterion_scores cs ON cs.system_id = s.id
+     WHERE s.system_key = $1`,
+    [systemKey],
+  );
+  if (!rows.length) return null;
+  const criteria = {};
+  for (const r of rows) if (r.criterion_id) criteria[r.criterion_id] = r.payload;
+  return { score: rows[0].score, colour: rows[0].colour, criteria };
+}
+
 module.exports = {
   upsertAll,
+  fetchCurrentReading,
   replaceSystem,
   fetchAll,
   fetchBenchmarkRows,
