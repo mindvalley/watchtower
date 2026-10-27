@@ -10,7 +10,7 @@ const { makeVerifier } = require('./db/ingest-auth');
 const { buildAllowlist } = require('./db/allowlist');
 const { handleIngest } = require('./db/ingest');
 const { ingestConfig, alertsConfig, displayNames } = require('./db/config');
-const { alertText, redCause, sendSlack } = require('./db/red-alerts');
+const { slackPayload, redCause, sendSlack } = require('./db/red-alerts');
 const { criteriaDocs } = require('./db/criteria');
 const { criteriaIds, criteriaSlugs } = require('./db/criteria');
 
@@ -111,7 +111,7 @@ function createApp(deps = {}) {
   const alerts = deps.alert ? { enabled: true } : alertsConfig();
   const readCurrent = deps.readCurrent || (alerts.enabled ? (key) => fetchCurrentReading(getPool(), key) : null);
   const alert = deps.alert
-    || (alerts.enabled ? (a) => sendSlack(alerts.webhookUrl, alertText({
+    || (alerts.enabled ? (a) => sendSlack(alerts.webhookUrl, slackPayload(alerts.webhookUrl, {
       ...a,
       boardUrl: alerts.boardUrl,
       cause: redCause(a.before && a.before.criteria, a.after.criteria, criterionNames()),

@@ -3,6 +3,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const {
   redTransition, mention, alertText, isOwnerId, sendSlack, redCause,
+  workflowFields, isWorkflowHook, slackPayload,
 } = require('../db/red-alerts');
 
 test('a system that turns red has dropped', () => {
@@ -67,10 +68,10 @@ test('with no board address the message still reads', () => {
   assert.doesNotMatch(text, /undefined|null/);
 });
 
-test('sendSlack posts the text as JSON to the webhook', async () => {
+test('sendSlack posts the payload as JSON to the webhook', async () => {
   const calls = [];
   const fetchImpl = async (url, init) => { calls.push({ url, init }); return { ok: true, status: 200 }; };
-  await sendSlack('https://hooks.example.test/x', 'hello', { fetchImpl });
+  await sendSlack('https://hooks.example.test/x', { text: 'hello' }, { fetchImpl });
   assert.strictEqual(calls[0].url, 'https://hooks.example.test/x');
   assert.strictEqual(calls[0].init.method, 'POST');
   assert.deepStrictEqual(JSON.parse(calls[0].init.body), { text: 'hello' });
@@ -79,7 +80,7 @@ test('sendSlack posts the text as JSON to the webhook', async () => {
 test('sendSlack throws on a refused post, without echoing the webhook address', async () => {
   const fetchImpl = async () => ({ ok: false, status: 403 });
   await assert.rejects(
-    sendSlack('https://hooks.example.test/secret-path', 'hello', { fetchImpl }),
+    sendSlack('https://hooks.example.test/secret-path', { text: 'hello' }, { fetchImpl }),
     (err) => /403/.test(err.message) && !/secret-path/.test(err.message),
   );
 });
@@ -90,7 +91,7 @@ test('sendSlack gives up after its time limit', { timeout: 1000 }, async () => {
     init.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
   });
   await assert.rejects(
-    sendSlack('https://hooks.example.test/x', 'hello', { fetchImpl, timeoutMs: 20 }),
+    sendSlack('https://hooks.example.test/x', { text: 'hello' }, { fetchImpl, timeoutMs: 20 }),
     { name: 'AbortError' },
   );
 });
@@ -158,4 +159,56 @@ test('a recovery carries no cause even if one is passed', () => {
     cause: { name: 'Security Posture', reason: 'critical', action: 'x' },
   });
   assert.doesNotMatch(text, /Cause:|Fix:/);
+});
+
+test('a workflow address is told apart from an app webhook', () => {
+  assert.ok(isWorkflowHook('https://hooks.slack.com/triggers/T0/1/abc'));
+  assert.ok(!isWorkflowHook('https://hooks.slack.com/services/T0/B0/abc'));
+  assert.ok(!isWorkflowHook('not a url'));
+});
+
+test('a workflow drop sends plain values, with no Slack formatting codes', () => {
+  const fields = workflowFields({
+    kind: 'dropped', system: 'alpha', before: { score: 63 }, after: { score: 25 },
+    owners: ['U0123ABCD'], boardUrl: 'https://board.example.test/',
+    cause: { name: 'Security Posture', reason: 'critical', action: 'Remove the exposed secret.' },
+  });
+  assert.deepStrictEqual(fields, {
+    icon: '🔴',
+    system: 'alpha',
+    summary: 'dropped to red (63 → 25).',
+    cause: 'Cause: Security Posture has a critical finding, which caps the score.',
+    fix: 'Fix: Remove the exposed secret.',
+    link: 'https://board.example.test/system/alpha',
+    owner_1: 'U0123ABCD',
+  });
+});
+
+test('a workflow recovery leaves the cause and fix empty', () => {
+  const fields = workflowFields({
+    kind: 'recovered', system: 'alpha', before: { score: 38 }, after: { score: 55 }, owners: [],
+    cause: { name: 'Security Posture', reason: 'critical', action: 'x' },
+  });
+  assert.strictEqual(fields.icon, '🟢');
+  assert.strictEqual(fields.summary, 'recovered from red (38 → 55).');
+  assert.strictEqual(fields.cause, '');
+  assert.strictEqual(fields.fix, '');
+  assert.strictEqual(fields.link, '');
+});
+
+test('a workflow tags at most three people and skips user groups', () => {
+  const fields = workflowFields({
+    kind: 'dropped', system: 'alpha', before: null, after: { score: 10 },
+    owners: ['S0123ABCD', 'U0000000A', 'W0000000B', 'U0000000C', 'U0000000D'],
+  });
+  assert.strictEqual(fields.owner_1, 'U0000000A');
+  assert.strictEqual(fields.owner_2, 'W0000000B');
+  assert.strictEqual(fields.owner_3, 'U0000000C');
+  assert.ok(!('owner_4' in fields));
+});
+
+test('the payload follows the kind of address', () => {
+  const alert = { kind: 'dropped', system: 'alpha', before: null, after: { score: 10 }, owners: [] };
+  assert.deepStrictEqual(Object.keys(slackPayload('https://hooks.slack.com/services/x', alert)), ['text']);
+  assert.strictEqual(slackPayload('https://hooks.slack.com/triggers/x', alert).system, 'alpha');
 });
