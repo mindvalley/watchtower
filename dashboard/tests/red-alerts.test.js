@@ -170,7 +170,7 @@ test('a workflow address is told apart from an app webhook', () => {
 test('a workflow drop sends plain values, with no Slack formatting codes', () => {
   const fields = workflowFields({
     kind: 'dropped', system: 'alpha', before: { score: 63 }, after: { score: 25 },
-    owners: ['U0123ABCD'], boardUrl: 'https://board.example.test/',
+    owners: ['S0123ABCD', 'U0123ABCD', 'U0000000A'], boardUrl: 'https://board.example.test/',
     cause: { name: 'Security Posture', reason: 'critical', action: 'Remove the exposed secret.' },
   });
   assert.deepStrictEqual(fields, {
@@ -179,36 +179,40 @@ test('a workflow drop sends plain values, with no Slack formatting codes', () =>
     summary: 'dropped to red (63 → 25).',
     cause: 'Cause: Security Posture has a critical finding, which caps the score.',
     fix: 'Fix: Remove the exposed secret.',
+    owner: 'U0123ABCD',
     link: 'https://board.example.test/system/alpha',
-    owner_1: 'U0123ABCD',
   });
 });
 
-test('a workflow recovery leaves the cause and fix empty', () => {
+test('Slack refuses empty workflow values, so every field says something', () => {
   const fields = workflowFields({
     kind: 'recovered', system: 'alpha', before: { score: 38 }, after: { score: 55 }, owners: [],
-    cause: { name: 'Security Posture', reason: 'critical', action: 'x' },
+    defaultOwner: 'U0DEFAULT1', cause: { name: 'Security Posture', reason: 'critical', action: 'x' },
   });
   assert.strictEqual(fields.icon, '🟢');
   assert.strictEqual(fields.summary, 'recovered from red (38 → 55).');
-  assert.strictEqual(fields.cause, '');
-  assert.strictEqual(fields.fix, '');
-  assert.strictEqual(fields.link, '');
+  assert.strictEqual(fields.owner, 'U0DEFAULT1');
+  for (const [key, value] of Object.entries(fields)) assert.ok(value, `${key} is empty`);
+  assert.doesNotMatch(fields.cause, /Security Posture/);
 });
 
-test('a workflow tags at most three people and skips user groups', () => {
+test('a drop with a cause but no action still fills the fix line', () => {
   const fields = workflowFields({
-    kind: 'dropped', system: 'alpha', before: null, after: { score: 10 },
-    owners: ['S0123ABCD', 'U0000000A', 'W0000000B', 'U0000000C', 'U0000000D'],
+    kind: 'dropped', system: 'alpha', before: null, after: { score: 10 }, owners: ['U0123ABCD'],
+    cause: { name: 'Test Coverage', reason: 'weakest', to: 0.5, action: null },
   });
-  assert.strictEqual(fields.owner_1, 'U0000000A');
-  assert.strictEqual(fields.owner_2, 'W0000000B');
-  assert.strictEqual(fields.owner_3, 'U0000000C');
-  assert.ok(!('owner_4' in fields));
+  assert.strictEqual(fields.fix, 'Fix: see the board.');
+});
+
+test('a workflow alert with no person to tag fails loudly instead of posting', () => {
+  assert.throws(
+    () => workflowFields({ kind: 'dropped', system: 'alpha', before: null, after: { score: 10 }, owners: ['S0123ABCD'] }),
+    /no one to tag for alpha/,
+  );
 });
 
 test('the payload follows the kind of address', () => {
-  const alert = { kind: 'dropped', system: 'alpha', before: null, after: { score: 10 }, owners: [] };
+  const alert = { kind: 'dropped', system: 'alpha', before: null, after: { score: 10 }, owners: ['U0123ABCD'] };
   assert.deepStrictEqual(Object.keys(slackPayload('https://hooks.slack.com/services/x', alert)), ['text']);
   assert.strictEqual(slackPayload('https://hooks.slack.com/triggers/x', alert).system, 'alpha');
 });

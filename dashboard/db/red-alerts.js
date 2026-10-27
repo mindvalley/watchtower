@@ -2,12 +2,13 @@
 
 const OWNER_ID = /^[UWS][A-Z0-9]{8,11}$/;
 const SEND_TIMEOUT_MS = 5000;
-// A Slack workflow's webhook takes a fixed set of variables, so owners go in
-// numbered slots. Slack's user-ID variable can't hold a user group.
-const WORKFLOW_OWNER_SLOTS = 3;
 
 function isOwnerId(value) {
   return typeof value === 'string' && OWNER_ID.test(value);
+}
+
+function isPersonId(value) {
+  return isOwnerId(value) && !value.startsWith('S');
 }
 
 function redTransition(beforeColour, afterColour) {
@@ -78,22 +79,25 @@ function alertText({
 }
 
 // A workflow posts its variables as plain text, so the formatting lives in the
-// workflow's message and only values are sent. Unused owner slots are left out.
+// workflow's message and only values are sent. Slack requires every variable,
+// and its user-ID type takes one person (no groups, no empty value), so the
+// alert tags the first person in owners, or the dashboard's default owner, and
+// a line with nothing to say still says something.
 function workflowFields({
-  kind, system, before, after, owners = [], boardUrl, cause,
+  kind, system, before, after, owners = [], boardUrl, cause, defaultOwner,
 }) {
+  const owner = owners.find(isPersonId) || defaultOwner;
+  if (!owner) throw new Error(`no one to tag for ${system}: a Slack workflow needs an owner or WATCHTOWER_ALERT_DEFAULT_OWNER`);
   const dropCause = kind === 'dropped' ? cause : null;
-  const fields = {
+  return {
     icon: kind === 'dropped' ? '🔴' : '🟢',
     system,
     summary: summary(kind, before, after),
-    cause: dropCause ? causeLine(dropCause, false) : '',
-    fix: dropCause && dropCause.action ? `Fix: ${dropCause.action}` : '',
-    link: boardLink(boardUrl, system),
+    cause: dropCause ? causeLine(dropCause, false) : 'No criterion holds it in red any more.',
+    fix: dropCause && dropCause.action ? `Fix: ${dropCause.action}` : (dropCause ? 'Fix: see the board.' : 'No action needed.'),
+    owner,
+    link: boardLink(boardUrl, system) || '(no board address set)',
   };
-  owners.filter((id) => !id.startsWith('S')).slice(0, WORKFLOW_OWNER_SLOTS)
-    .forEach((id, i) => { fields[`owner_${i + 1}`] = id; });
-  return fields;
 }
 
 function isWorkflowHook(webhookUrl) {
@@ -126,5 +130,5 @@ async function sendSlack(webhookUrl, payload, { fetchImpl = fetch, timeoutMs = S
 
 module.exports = {
   redTransition, redCause, mention, alertText, workflowFields, isWorkflowHook, slackPayload,
-  isOwnerId, sendSlack, OWNER_ID,
+  isOwnerId, isPersonId, sendSlack, OWNER_ID,
 };

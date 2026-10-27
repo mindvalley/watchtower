@@ -114,6 +114,7 @@ function createApp(deps = {}) {
     || (alerts.enabled ? (a) => sendSlack(alerts.webhookUrl, slackPayload(alerts.webhookUrl, {
       ...a,
       boardUrl: alerts.boardUrl,
+      defaultOwner: alerts.defaultOwner,
       cause: redCause(a.before && a.before.criteria, a.after.criteria, criterionNames()),
     })) : null);
 
