@@ -1,5 +1,6 @@
 'use strict';
 const fs = require('fs');
+const { isPersonId } = require('./red-alerts');
 
 // Everything the operator supplies, read from the environment.
 //
@@ -82,7 +83,13 @@ function displayNames() {
 function alertsConfig(env = process.env) {
   const webhookUrl = (env.WATCHTOWER_SLACK_WEBHOOK_URL || '').trim();
   if (!webhookUrl) return { enabled: false };
-  return { enabled: true, webhookUrl, boardUrl: (env.WATCHTOWER_PUBLIC_URL || '').trim() || null };
+  const defaultOwner = (env.WATCHTOWER_ALERT_DEFAULT_OWNER || '').trim();
+  return {
+    enabled: true,
+    webhookUrl,
+    boardUrl: (env.WATCHTOWER_PUBLIC_URL || '').trim() || null,
+    defaultOwner: isPersonId(defaultOwner) ? defaultOwner : null,
+  };
 }
 
 module.exports = { ingestConfig, alertsConfig, displayNames, readJsonSetting };

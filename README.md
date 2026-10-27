@@ -104,7 +104,8 @@ string and a mounted volume hands you a file.
 | `WATCHTOWER_DISPLAY_NAMES` | Display casing for organisations and systems. |
 | `WATCHTOWER_HISTORY_START` | Ignore readings before this date. Empty shows everything. |
 | `WATCHTOWER_MIGRATE_ON_BOOT` | `false` to apply migrations yourself. |
-| `WATCHTOWER_SLACK_WEBHOOK_URL` | A Slack incoming webhook. When set, a publish that moves a system into or out of red posts there, tagging the system's owners. Keep it secret. |
+| `WATCHTOWER_SLACK_WEBHOOK_URL` | A Slack incoming webhook or workflow webhook (see the root README for the workflow's variables). When set, a publish that moves a system into or out of red posts there, tagging the system's owners. Keep it secret. |
+| `WATCHTOWER_ALERT_DEFAULT_OWNER` | A Slack member id (`U…`) tagged when a workflow alert's system lists no person among its owners. Only used with a workflow webhook. |
 | `WATCHTOWER_PUBLIC_URL` | The board's address, so an alert can link to the system's page. |
 
 **`POST /ingest` is off until both `WATCHTOWER_INGEST_AUDIENCE` and
