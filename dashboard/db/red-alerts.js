@@ -7,6 +7,10 @@ function isOwnerId(value) {
   return typeof value === 'string' && OWNER_ID.test(value);
 }
 
+function isPersonId(value) {
+  return isOwnerId(value) && !value.startsWith('S');
+}
+
 function redTransition(beforeColour, afterColour) {
   if (afterColour === 'red' && beforeColour !== 'red') return 'dropped';
   if (beforeColour === 'red' && afterColour && afterColour !== 'red') return 'recovered';
@@ -44,37 +48,78 @@ function redCause(beforeCriteria, afterCriteria, names = {}) {
   return describe(weakest, { reason: 'weakest', to: weakest[1].score });
 }
 
-function causeLine(cause) {
-  if (cause.reason === 'critical') return `Cause: *${cause.name}* has a critical finding, which caps the score.`;
-  if (cause.reason === 'fell') return `Cause: *${cause.name}* fell furthest (${cause.from} → ${cause.to} of 5).`;
-  return `Cause: *${cause.name}* is the weakest criterion (${cause.to} of 5).`;
+function causeLine(cause, bold = true) {
+  const name = bold ? `*${cause.name}*` : cause.name;
+  if (cause.reason === 'critical') return `Cause: ${name} has a critical finding, which caps the score.`;
+  if (cause.reason === 'fell') return `Cause: ${name} fell furthest (${cause.from} → ${cause.to} of 5).`;
+  return `Cause: ${name} is the weakest criterion (${cause.to} of 5).`;
+}
+
+function summary(kind, before, after) {
+  const scores = before && before.score != null ? `${before.score} → ${after.score}` : `${after.score}`;
+  return kind === 'dropped' ? `dropped to red (${scores}).` : `recovered from red (${scores}).`;
+}
+
+function boardLink(boardUrl, system) {
+  return boardUrl ? `${boardUrl.replace(/\/+$/, '')}/system/${encodeURIComponent(system)}` : '';
 }
 
 function alertText({
   kind, system, before, after, owners = [], boardUrl, cause,
 }) {
-  const scores = before && before.score != null ? `${before.score} → ${after.score}` : `${after.score}`;
-  const headline = kind === 'dropped'
-    ? `:red_circle: *${system}* dropped to red (${scores}).`
-    : `:large_green_circle: *${system}* recovered from red (${scores}).`;
-  const lines = [headline];
+  const icon = kind === 'dropped' ? ':red_circle:' : ':large_green_circle:';
+  const lines = [`${icon} *${system}* ${summary(kind, before, after)}`];
   if (kind === 'dropped' && cause) {
     lines.push(causeLine(cause));
     if (cause.action) lines.push(`Fix: ${cause.action}`);
   }
   if (owners.length) lines.push(owners.map(mention).join(' '));
-  if (boardUrl) lines.push(`${boardUrl.replace(/\/+$/, '')}/system/${encodeURIComponent(system)}`);
+  if (boardUrl) lines.push(boardLink(boardUrl, system));
   return lines.join('\n');
 }
 
-async function sendSlack(webhookUrl, text, { fetchImpl = fetch, timeoutMs = SEND_TIMEOUT_MS } = {}) {
+// A workflow posts its variables as plain text, so the formatting lives in the
+// workflow's message and only values are sent. Slack requires every variable,
+// and its user-ID type takes one person (no groups, no empty value), so the
+// alert tags the first person in owners, or the dashboard's default owner, and
+// a line with nothing to say still says something.
+function workflowFields({
+  kind, system, before, after, owners = [], boardUrl, cause, defaultOwner,
+}) {
+  const owner = owners.find(isPersonId) || defaultOwner;
+  if (!owner) throw new Error(`no one to tag for ${system}: a Slack workflow needs an owner or WATCHTOWER_ALERT_DEFAULT_OWNER`);
+  const dropCause = kind === 'dropped' ? cause : null;
+  return {
+    icon: kind === 'dropped' ? '🔴' : '🟢',
+    system,
+    summary: summary(kind, before, after),
+    cause: dropCause ? causeLine(dropCause, false) : 'No criterion holds it in red any more.',
+    fix: dropCause && dropCause.action ? `Fix: ${dropCause.action}` : (dropCause ? 'Fix: see the board.' : 'No action needed.'),
+    owner,
+    link: boardLink(boardUrl, system) || '(no board address set)',
+  };
+}
+
+function isWorkflowHook(webhookUrl) {
+  try {
+    return new URL(webhookUrl).pathname.startsWith('/triggers/');
+  } catch {
+    return false;
+  }
+}
+
+function slackPayload(webhookUrl, alert) {
+  return isWorkflowHook(webhookUrl) ? workflowFields(alert) : { text: alertText(alert) };
+}
+
+async function sendSlack(webhookUrl, payload, { fetchImpl = fetch, timeoutMs = SEND_TIMEOUT_MS } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetchImpl(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(payload),
       signal: controller.signal,
     });
     if (!res.ok) throw new Error(`Slack refused the alert: HTTP ${res.status}`);
@@ -84,5 +129,6 @@ async function sendSlack(webhookUrl, text, { fetchImpl = fetch, timeoutMs = SEND
 }
 
 module.exports = {
-  redTransition, redCause, mention, alertText, isOwnerId, sendSlack, OWNER_ID,
+  redTransition, redCause, mention, alertText, workflowFields, isWorkflowHook, slackPayload,
+  isOwnerId, isPersonId, sendSlack, OWNER_ID,
 };

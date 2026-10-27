@@ -244,6 +244,27 @@ their Slack member ids (`U…`) or user-group ids (`S…`) in its config entry:
 Owners travel with each publish, so the team that owns the config decides who is
 tagged. A system with no owners still alerts, untagged.
 
+The webhook can be a Slack app's incoming webhook (`…/services/…`), which gets one
+formatted message, or a Slack workflow's webhook (`…/triggers/…`). A workflow posts
+its variables as plain text, so the dashboard sends separate values and the
+formatting lives in the workflow's message. Give the workflow's trigger these
+variables:
+
+| Variable | Type | Holds |
+|---|---|---|
+| `icon` | Text | 🔴 on a drop, 🟢 on a recovery |
+| `system` | Text | the system's name |
+| `summary` | Text | `dropped to red (63 → 38).` or `recovered from red (…).` |
+| `cause` | Text | the cause line on a drop |
+| `fix` | Text | the first remedial action |
+| `owner` | Slack user ID | the first person in `owners` |
+| `link` | Text | the system's page (set `WATCHTOWER_PUBLIC_URL`) |
+
+Slack refuses a workflow post with any variable empty, and a user-ID variable holds
+one person, not a group. So a workflow tags only the first person in `owners`; a
+system without one tags `WATCHTOWER_ALERT_DEFAULT_OWNER`, and with neither its
+alert is logged as an error instead of posted.
+
 ### Allowances
 
 See [guides/allowances.md](guides/allowances.md).
