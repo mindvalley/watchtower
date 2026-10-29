@@ -974,6 +974,7 @@ module.exports = { relativize, relativizePaths, vueSourceMapper };
  */
 
 const fs = __nccwpck_require__(896);
+const os = __nccwpck_require__(857);
 const path = __nccwpck_require__(928);
 const { execFileSync } = __nccwpck_require__(317);
 const { extractDeps } = __nccwpck_require__(874);
@@ -1046,9 +1047,43 @@ function runToFile(cmd, args, outFile) {
   }
 }
 
+// The scanned repository must not be able to suppress its own findings: a
+// .gitleaks.toml, .gitleaksignore or inline allow comment there would lift a
+// score with no trace in the report. Exceptions belong in the allowance list,
+// where they are recorded and reviewed. `neutralDir` holds a config with only
+// gitleaks' built-in rules and an empty folder to read .gitleaksignore from.
+function gitleaksArgs(repoDir, outDir, neutralDir) {
+  return ['detect', '--source', repoDir, '--no-git',
+    '--config', path.join(neutralDir, 'gitleaks.toml'),
+    '--gitleaks-ignore-path', path.join(neutralDir, 'no-ignores'),
+    '--ignore-gitleaks-allow',
+    '--report-format', 'json', '--report-path', path.join(outDir, 'gitleaks.json'), '--exit-code', '0'];
+}
+
+function semgrepArgs(repoDir, outDir) {
+  return ['--config', 'auto', '--disable-nosem', '--json', '--output', path.join(outDir, 'semgrep.json'), repoDir];
+}
+
+function makeNeutralDir() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'watchtower-neutral-'));
+  fs.writeFileSync(path.join(dir, 'gitleaks.toml'), '[extend]\nuseDefault = true\n');
+  fs.mkdirSync(path.join(dir, 'no-ignores'));
+  return dir;
+}
+
+// gitleaks reads .gitleaksignore from the scanned folder whatever
+// --gitleaks-ignore-path says, so it is deleted. `repoDir` is always the
+// throwaway copy materialise() made, never the caller's own folder.
+function neutraliseRepoConfig(repoDir) {
+  const found = ['.gitleaks.toml', '.gitleaksignore'].filter((f) => fs.existsSync(path.join(repoDir, f)));
+  fs.rmSync(path.join(repoDir, '.gitleaksignore'), { force: true });
+  return found;
+}
+
 function main() {
   const tree = materialise(systemTarget(SYSTEM), { prefix: SYSTEM, token: GH_TOKEN });
   const outDir = reportsDir(SYSTEM);
+  let neutralDir;
 
   // The tree was previously left behind on every run of this program — and it
   // holds a .git/config with the token in plaintext. Harmless on a runner that
@@ -1056,6 +1091,7 @@ function main() {
   try {
     for (const note of tree.notes) console.log(`  ${note}`);
     const repoDir = tree.dir;
+    neutralDir = makeNeutralDir();
 
     // Dependency manifests → direct prod/dev dep lists, so trivy CVEs can be scored
     // by attributable environment at parse time (prod scored, dev discounted,
@@ -1064,17 +1100,21 @@ function main() {
     writeJson(outDir, 'direct-deps', directDeps);
 
     // Secrets — gitleaks over the working tree (no git history needed with --no-git).
-    runToFile('gitleaks', ['detect', '--source', repoDir, '--no-git', '--report-format', 'json', '--report-path', path.join(outDir, 'gitleaks.json'), '--exit-code', '0'], path.join(outDir, 'gitleaks.json'));
+    for (const f of neutraliseRepoConfig(repoDir)) {
+      console.log(`  ignoring the repository's ${f}; exceptions go in the allowance list`);
+    }
+    runToFile('gitleaks', gitleaksArgs(repoDir, outDir, neutralDir), path.join(outDir, 'gitleaks.json'));
 
     // Dependency CVEs — trivy fs, vuln scanner only (reads mix.lock/Gemfile.lock/package-lock.json).
     runToFile('trivy', ['fs', '--scanners', 'vuln', '--format', 'json', '--output', path.join(outDir, 'trivy.json'), repoDir], path.join(outDir, 'trivy.json'));
 
     // SAST — semgrep --config auto over source (no compile; multi-language incl. Elixir/Ruby/JS/Vue).
-    runToFile('semgrep', ['--config', 'auto', '--json', '--output', path.join(outDir, 'semgrep.json'), repoDir], path.join(outDir, 'semgrep.json'));
+    runToFile('semgrep', semgrepArgs(repoDir, outDir), path.join(outDir, 'semgrep.json'));
 
     console.log(`Scanned ${SYSTEM} (${tree.label}) -> ${outDir}`);
   } finally {
     tree.cleanup();
+    if (neutralDir) fs.rmSync(neutralDir, { recursive: true, force: true });
   }
 }
 
@@ -1084,7 +1124,9 @@ if (require.main === require.cache[eval('__filename')]) {
 
 // runToFile is exported for its no-false-green guard, which is worth a test even
 // though the rest of this edge is validated by running it.
-module.exports = { main, runToFile };
+module.exports = {
+  main, runToFile, gitleaksArgs, semgrepArgs, makeNeutralDir, neutraliseRepoConfig,
+};
 
 
 /***/ }),

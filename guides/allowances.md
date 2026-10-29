@@ -6,6 +6,8 @@ An allowance removes the finding from the score and keeps it in the report, mark
 
 Each entry therefore changes a published number, so each one is worth its own review.
 
+This list is the only way to exclude a finding. The scan ignores a scanned repository's own `.gitleaks.toml`, `.gitleaksignore`, `gitleaks:allow` and `nosemgrep` comments, because those would remove findings from the score without any record in the report.
+
 **Matched on a specific line:**
 
 ```json

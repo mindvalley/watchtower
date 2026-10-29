@@ -29,6 +29,16 @@ jobs:
       # running.
       - run: npm ci --no-audit --no-fund
 
+      # The repository-config test runs the real scanner; without it the test
+      # would skip and guard nothing.
+      - name: Install gitleaks at the pinned version
+        run: |
+          v="$(node -p "require('./scripts/benchmark/scanner-pins.json').pinned.gitleaks")"
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${v}/gitleaks_${v}_linux_x64.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" gitleaks
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
       - run: npm test
 
       - name: The committed bundles match the sources
