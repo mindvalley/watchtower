@@ -26,7 +26,7 @@ const { buildHotspots, definingFiles } = require('./place-ranking');
 
 const GRAPHIFY_VERSION = '0.9.28';
 const MAX_CYCLES = 500;
-const GRAPHIFY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const GRAPHIFY_TIMEOUT_MS = 15 * 60 * 1000;
 // The benchmark spec's own window for boundary drift ("last 90 days").
 const COUPLING_WINDOW_DAYS = 90;
 
