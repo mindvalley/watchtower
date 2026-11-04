@@ -180,8 +180,16 @@ test('a workflow drop sends plain values, with no Slack formatting codes', () =>
     cause: 'Cause: Security Posture has a critical finding, which caps the score.',
     fix: 'Fix: Remove the exposed secret.',
     owner: 'U0123ABCD',
+    owner2: 'U0000000A',
     link: 'https://board.example.test/system/alpha',
   });
+});
+
+test('a workflow with one person to tag repeats them as the second owner', () => {
+  const one = workflowFields({ kind: 'dropped', system: 'alpha', before: null, after: { score: 10 }, owners: ['S0123ABCD', 'U0123ABCD'] });
+  assert.strictEqual(one.owner2, 'U0123ABCD');
+  const none = workflowFields({ kind: 'dropped', system: 'alpha', before: null, after: { score: 10 }, owners: [], defaultOwner: 'U0DEFAULT1' });
+  assert.strictEqual(none.owner2, 'U0DEFAULT1');
 });
 
 test('Slack refuses empty workflow values, so every field says something', () => {

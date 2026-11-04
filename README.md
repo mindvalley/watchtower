@@ -258,10 +258,11 @@ variables:
 | `cause` | Text | the cause line on a drop |
 | `fix` | Text | the first remedial action |
 | `owner` | Slack user ID | the first person in `owners` |
+| `owner2` | Slack user ID | the second person in `owners`, or `owner` again when there is no second |
 | `link` | Text | the system's page (set `WATCHTOWER_PUBLIC_URL`) |
 
 Slack refuses a workflow post with any variable empty, and a user-ID variable holds
-one person, not a group. So a workflow tags only the first person in `owners`; a
+one person, not a group. So a workflow tags the first two people in `owners`; a
 system without one tags `WATCHTOWER_ALERT_DEFAULT_OWNER`, and with neither its
 alert is logged as an error instead of posted.
 
