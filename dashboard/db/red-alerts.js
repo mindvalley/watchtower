@@ -86,7 +86,8 @@ function alertText({
 function workflowFields({
   kind, system, before, after, owners = [], boardUrl, cause, defaultOwner,
 }) {
-  const owner = owners.find(isPersonId) || defaultOwner;
+  const people = owners.filter(isPersonId);
+  const owner = people[0] || defaultOwner;
   if (!owner) throw new Error(`no one to tag for ${system}: a Slack workflow needs an owner or WATCHTOWER_ALERT_DEFAULT_OWNER`);
   const dropCause = kind === 'dropped' ? cause : null;
   return {
@@ -96,6 +97,7 @@ function workflowFields({
     cause: dropCause ? causeLine(dropCause, false) : 'No criterion holds it in red any more.',
     fix: dropCause && dropCause.action ? `Fix: ${dropCause.action}` : (dropCause ? 'Fix: see the board.' : 'No action needed.'),
     owner,
+    owner2: people[1] || owner,
     link: boardLink(boardUrl, system) || '(no board address set)',
   };
 }
