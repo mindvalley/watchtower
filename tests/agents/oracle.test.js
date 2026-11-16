@@ -43,6 +43,21 @@ test('an oversized area is split in two when there is room', () => {
   assert.equal(areas.reduce((s, a) => s + a.files, 0), files.length);
 });
 
+test('repeated splits never lose or duplicate a file', () => {
+  const files = ['package.json', 'apps/api/README.md', 'apps/api/scripts/seed.ts', 'apps/api/src/main.ts'];
+  for (let d = 0; d < 12; d += 1) for (let i = 0; i < 25 + d * 5; i += 1) files.push(`apps/api/src/domains/d${d}/f${i}.ts`);
+  for (let i = 0; i < 30; i += 1) files.push(`apps/api/src/common/c${i}.ts`);
+  for (let i = 0; i < 60; i += 1) files.push(`apps/web/src/f${i}.ts`);
+  for (const maxAreas of [3, 5, 9, 14]) {
+    const areas = splitAreas(files, { maxAreas });
+    assert.equal(areas.reduce((s, a) => s + a.files, 0), files.length, `maxAreas ${maxAreas}`);
+    assert.ok(areas.length <= maxAreas, `maxAreas ${maxAreas}`);
+  }
+  // The api folder is split below src/domains, with what was stepped past kept.
+  const areas = splitAreas(files, { maxAreas: 9 });
+  assert.ok(areas.some((a) => a.paths.some((p) => p.endsWith('(other files)'))));
+});
+
 // --- fingerprint ---------------------------------------------------------
 
 test('fingerprints rest on the files named, not the wording', () => {

@@ -68,38 +68,65 @@ function group(files, keyFn) {
   return map;
 }
 
-function areaOf(name, paths, files) {
-  return { name, paths, files: files.length, source: files.filter(isSource).length, _files: files };
+// An area is a list of parts, each a [label, files] pair. Labels are what the
+// auditor is told to start from; the files are what the area covers. Splitting
+// always works on the parts, so no file can fall out of every area.
+function areaOf(name, parts) {
+  const files = parts.flatMap(([, f]) => f);
+  return {
+    name, paths: parts.map(([p]) => p).sort(), files: files.length, source: files.filter(isSource).length, _files: files, _parts: parts,
+  };
 }
 
-// Splits one area into two by the first directory level below it that actually
-// branches (apps/api/src/domains/* rather than the lone apps/api/src), balancing
-// source files.
-function splitInTwo(area) {
-  if (area.paths.length !== 1) return null;
-  const base = area.paths[0].split('/').length;
-  let sub = null;
-  for (let depth = base + 1; depth <= base + 4; depth += 1) {
-    const candidate = group(area._files.filter((f) => f.split('/').length > depth), (f) => f.split('/').slice(0, depth).join('/'));
-    if (candidate.size >= 2) { sub = candidate; break; }
-  }
-  if (!sub) return null;
-  const loose = area._files.filter((f) => ![...sub.values()].some((list) => list.includes(f)));
-  if (loose.length) sub.set(area.paths[0], loose);
-  const parts = [...sub.entries()].sort((a, b) => b[1].filter(isSource).length - a[1].filter(isSource).length);
+const sourceCount = (files) => files.filter(isSource).length;
+
+// Puts [label, files] parts into two bins of roughly equal source size.
+function balance(parts) {
   const bins = [[], []];
   const weight = [0, 0];
-  for (const [p, fs2] of parts) {
+  for (const part of [...parts].sort((a, b) => sourceCount(b[1]) - sourceCount(a[1]))) {
     const i = weight[0] <= weight[1] ? 0 : 1;
-    bins[i].push([p, fs2]);
-    weight[i] += fs2.filter(isSource).length;
+    bins[i].push(part);
+    weight[i] += sourceCount(part[1]);
   }
-  if (!bins[1].length) return null;
-  return bins.map((bin, i) => areaOf(
-    `${area.name} (${i + 1} of 2)`,
-    bin.map(([p]) => p).sort(),
-    bin.flatMap(([, f]) => f),
-  ));
+  return bins[1].length ? bins : null;
+}
+
+// Splits one area in two. A group of folders is split as a group. A single
+// folder is split where it actually branches: step down past any child that holds
+// most of the source (apps/api -> apps/api/src -> apps/api/src/domains), keeping
+// what was stepped past as "other files", and divide the children there.
+function splitInTwo(area) {
+  if (area._parts.length > 1) {
+    const bins = balance(area._parts);
+    return bins && bins.map((bin, i) => areaOf(`${area.name}, part ${i + 1}`, bin));
+  }
+
+  let prefix = area.paths[0];
+  const stepped = [];
+  for (let guard = 0; guard < 8; guard += 1) {
+    const depth = prefix.split('/').length + 1;
+    const inside = area._files.filter((f) => f.startsWith(`${prefix}/`) && f.split('/').length > depth);
+    const kids = group(inside, (f) => f.split('/').slice(0, depth).join('/'));
+    const others = area._files.filter((f) => !inside.includes(f) && !stepped.includes(f));
+    if (kids.size === 0) return null;
+    const ranked = [...kids.entries()].sort((a, b) => sourceCount(b[1]) - sourceCount(a[1]));
+    const total = sourceCount(inside) + sourceCount(others);
+    if (kids.size === 1 || sourceCount(ranked[0][1]) > 0.8 * total) {
+      stepped.push(...others, ...ranked.slice(1).flatMap(([, f]) => f));
+      [prefix] = ranked[0];
+      continue;
+    }
+    const bins = balance(ranked);
+    if (!bins) return null;
+    const rest = [...stepped, ...others];
+    if (rest.length) {
+      const lighter = sourceCount(bins[0].flatMap(([, f]) => f)) <= sourceCount(bins[1].flatMap(([, f]) => f)) ? 0 : 1;
+      bins[lighter].push([`${area.paths[0]} (other files)`, rest]);
+    }
+    return bins.map((bin, i) => areaOf(`${area.name} (${i + 1} of 2)`, bin));
+  }
+  return null;
 }
 
 function splitAreas(files, { maxAreas = 9 } = {}) {
@@ -109,16 +136,20 @@ function splitAreas(files, { maxAreas = 9 } = {}) {
   byKey.delete(CONFIG_AREA);
 
   const keyed = [...byKey.entries()]
-    .map(([k, f]) => areaOf(k, [k], f))
+    .map(([k, f]) => areaOf(k, [[k, f]]))
     .sort((a, b) => b.source - a.source || a.name.localeCompare(b.name));
 
   const room = Math.max(1, maxAreas - (configFiles.length ? 1 : 0));
-  let areas = keyed;
-  if (keyed.length > room) {
-    const own = keyed.slice(0, room - 1);
-    const rest = keyed.slice(room - 1);
-    areas = [...own, areaOf(REST_AREA, rest.map((a) => a.name).sort(), rest.flatMap((a) => a._files))];
-  }
+  // A folder with a small share of the source does not get an auditor of its
+  // own; slots go to splitting the big ones instead.
+  const totalSource = keyed.reduce((s, a) => s + a.source, 0);
+  const minOwn = Math.max(20, totalSource * 0.04);
+  let own = keyed.filter((a) => a.source >= minOwn).slice(0, room - 1);
+  if (!own.length) own = keyed.slice(0, 1);
+  const rest = keyed.filter((a) => !own.includes(a));
+  let areas = rest.length
+    ? [...own, areaOf(REST_AREA, rest.flatMap((a) => a._parts))]
+    : own;
 
   // Split oversized areas while there is room.
   for (;;) {
@@ -133,10 +164,10 @@ function splitAreas(files, { maxAreas = 9 } = {}) {
   }
 
   if (configFiles.length) {
-    const opsDirs = [...new Set(configFiles.map((f) => (f.includes('/') ? f.split('/')[0] : '(root files)')))].sort();
-    areas.push(areaOf(CONFIG_AREA, opsDirs, configFiles));
+    const byDir = group(configFiles, (f) => (f.includes('/') ? f.split('/')[0] : '(root files)'));
+    areas.push(areaOf(CONFIG_AREA, [...byDir.entries()]));
   }
-  return areas.map(({ _files, ...a }) => a);
+  return areas.map(({ _files, _parts, ...a }) => a);
 }
 
 module.exports = { collectFiles, splitAreas, keyOf, CONFIG_AREA, REST_AREA };
