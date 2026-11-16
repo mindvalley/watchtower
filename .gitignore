@@ -4,3 +4,8 @@ reports/
 # silently dropped dashboard/public/data/criteria-docs.json, a file the board
 # reads at startup, so the published dashboard would not have started at all.
 /data/
+
+# Agent run folders and local keys. In remote mode runs are committed to the
+# private config repository, never to this public one.
+/runs/
+.env
