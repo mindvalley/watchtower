@@ -19,7 +19,9 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', '.next', 'coverage', '_build', 'deps', 'vendor']);
-const LIMITS = { listEntries: 400, readLines: 600, readBytes: 120_000, searchLines: 150, searchTimeoutMs: 20_000 };
+// Every result stays in the conversation and is re-read on each later turn, so
+// these limits are as much about cost as about context.
+const LIMITS = { listEntries: 300, readLines: 300, readBytes: 60_000, searchLines: 80, searchTimeoutMs: 20_000 };
 
 class ToolInputError extends Error {}
 
@@ -86,7 +88,7 @@ function search(root, { pattern, path: rel = '.', glob } = {}) {
   let stdout = '';
   try {
     stdout = execFileSync('grep', args, {
-      cwd: root, encoding: 'utf8', timeout: LIMITS.searchTimeoutMs, maxBuffer: 32 * 1024 * 1024,
+      cwd: root, encoding: 'utf8', timeout: LIMITS.searchTimeoutMs, maxBuffer: 32 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'],
     });
   } catch (err) {
     if (err.status === 1) return 'no matches';
@@ -113,7 +115,7 @@ const DEFS = [
   },
   {
     name: 'read_file',
-    description: 'Read a file from the repository, with line numbers. Up to 600 lines per call; use start_line to read on.',
+    description: 'Read a file from the repository, with line numbers. Up to 300 lines per call; use start_line and end_line to read the part you need.',
     input_schema: {
       type: 'object',
       properties: {

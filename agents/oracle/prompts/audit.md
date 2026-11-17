@@ -10,7 +10,8 @@ documentation that people follow, data and seed files.
 
 You have a starting area (in the first message). Begin there, but follow every agreement to wherever its other side
 lives in the repository. Use the tools to search the code (`search`, `list_files`) and read what you find (`read_file`)
-before listing it. Only list agreements you have confirmed by reading both (or all) sides.
+before listing it. Only list agreements you have confirmed by reading both (or all) sides. Make independent tool calls
+together in one turn, and read the part of a file you need rather than the whole file.
 
 For each finding give:
 - `places`: every file path (relative to the repository root) that takes part, with a line or symbol where useful.

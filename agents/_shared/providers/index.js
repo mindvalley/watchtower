@@ -8,6 +8,7 @@
  *   const convo = provider.conversation({ system, tools });
  *   let turn = await convo.send('first message');            // a string, or
  *   turn = await convo.send([{ id, output, isError }]);      // tool results
+ *   turn = await convo.send(results, { note });              // plus a short note
  *
  *   turn = {
  *     toolCalls: [{ id, name, input }],

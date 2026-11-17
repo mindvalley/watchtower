@@ -56,12 +56,12 @@ test('tools refuse a symlink that points outside the tree', () => {
 });
 
 test('read_file numbers lines and says where to read on', () => {
-  const body = Array.from({ length: 700 }, (_, i) => `line ${i + 1}`).join('\n');
+  const body = Array.from({ length: 400 }, (_, i) => `line ${i + 1}`).join('\n');
   const root = tmpTree({ 'big.ts': body });
   const r = treeTools(root).run('read_file', { path: 'big.ts' });
   assert.equal(r.isError, false);
   assert.match(r.output, /^1\tline 1/);
-  assert.match(r.output, /read on with start_line 601/);
+  assert.match(r.output, /read on with start_line 301/);
 });
 
 test('search finds matches, skips node_modules, and reports none cleanly', () => {
@@ -133,6 +133,26 @@ test('the loop runs tools until the agent submits, and returns the submission', 
   assert.deepEqual(out, { ok: true });
   assert.match(p.calls[1].content[0].output, /hello/);
   assert.equal(meter.calls, 2);
+});
+
+test('the loop warns the agent ten turns before its limit, once', async () => {
+  const root = tmpTree({ 'a.ts': 'x' });
+  const p = fakeProvider([{ stop: 'tool', toolCalls: [{ id: 't', name: 'list_files', input: {} }] }]);
+  const notes = [];
+  const provider = {
+    conversation(opts) {
+      const c = p.conversation(opts);
+      return { send: (content, extra) => { notes.push(extra && extra.note); return c.send(content); } };
+    },
+  };
+  await assert.rejects(
+    runAgent({ provider, system: 's', prompt: 'go', tools: treeTools(root), submit: SUBMIT, meter: new CostMeter({}), maxTurns: 15 }),
+    /no answer after 15 turns/,
+  );
+  const warned = notes.map((n, i) => [n, i]).filter(([n]) => n);
+  assert.equal(warned.length, 1);
+  assert.equal(warned[0][1], 4); // turn 5 of 15: ten turns left
+  assert.match(warned[0][0], /10 turns left.*submit_answer/);
 });
 
 test('the loop nudges once, then fails an agent that never submits', async () => {
@@ -260,11 +280,11 @@ test('anthropic adapter sends cached, streamed requests (fallbacks when asked) a
   assert.deepEqual(sent[0].betas, ['server-side-fallback-2026-07-01']);
   assert.deepEqual(sent[0].cache_control, { type: 'ephemeral' });
 
-  await convo.send([{ id: 'tu1', output: 'found', isError: false }]);
+  await convo.send([{ id: 'tu1', output: 'found', isError: false }], { note: 'wrap up' });
   const second = sent[1].messages;
   assert.equal(second[1].role, 'assistant');
   assert.equal(second[1].content[0].type, 'thinking'); // passed back unchanged
-  assert.deepEqual(second[2].content, [{ type: 'tool_result', tool_use_id: 'tu1', content: 'found' }]);
+  assert.deepEqual(second[2].content, [{ type: 'tool_result', tool_use_id: 'tu1', content: 'found' }, { type: 'text', text: 'wrap up' }]);
 });
 
 function recordingClient(sent) {

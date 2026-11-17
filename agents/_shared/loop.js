@@ -20,8 +20,13 @@ class AgentError extends Error {
   }
 }
 
+// When this many turns are left, the agent is told to wrap up and submit what it
+// has. An agent that reaches the limit without submitting has cost the whole
+// budget and returns nothing.
+const WRAP_UP_TURNS = 10;
+
 async function runAgent({
-  provider, system, prompt, tools, submit, meter, maxTurns = 120, label, log = () => {},
+  provider, system, prompt, tools, submit, meter, maxTurns = 80, label, log = () => {},
 }) {
   const allTools = [...tools.defs, submit];
   const convo = provider.conversation({ system, tools: allTools });
@@ -30,7 +35,11 @@ async function runAgent({
 
   for (let turnNo = 1; turnNo <= maxTurns; turnNo += 1) {
     meter.beforeCall();
-    const turn = await convo.send(next);
+    const left = maxTurns - turnNo;
+    const note = Array.isArray(next) && left === WRAP_UP_TURNS
+      ? `${left} turns left. Finish what you are checking and call ${submit.name} with what you have confirmed.`
+      : undefined;
+    const turn = await convo.send(next, note ? { note } : undefined);
     meter.add(turn.usage, turn.model);
 
     if (turn.stop === 'refusal') throw new AgentError('the model declined the request', { label });
@@ -76,4 +85,4 @@ async function mapLimit(items, limit, fn) {
   return results;
 }
 
-module.exports = { runAgent, mapLimit, AgentError };
+module.exports = { runAgent, mapLimit, AgentError, WRAP_UP_TURNS };

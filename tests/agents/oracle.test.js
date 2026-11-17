@@ -135,6 +135,7 @@ test('a full run writes every file, merges duplicates, verifies, and puts securi
     provider: scriptedProvider(), treeDir: fixtureTree(), runDir, meter: new CostMeter({ prices: SETTINGS.prices, model: 'claude-opus-5-5' }), commit: 'abc',
   });
   assert.equal(run.status, 'complete');
+  assert.equal(run.areas[0], CONFIG_AREA, 'config and operations is audited first');
   for (const f of ['areas.json', 'findings.json', 'bugs.json', 'run.json', 'report.md']) assert.ok(fs.existsSync(path.join(runDir, f)), f);
   assert.equal(run.counts.raw_findings, 2);
   assert.equal(run.counts.findings, 1);

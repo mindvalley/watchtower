@@ -2,7 +2,7 @@
   "name": "oracle",
   "looks_for": "places that will break when someone changes one side of an unwritten agreement",
   "changes": "proposes a guard: a test that fails on a one-sided change, or a single source of truth",
-  "prompt_version": "2026-11-16",
+  "prompt_version": "2026-11-17",
   "prompts": {
     "audit": "prompts/audit.md",
     "merge": "prompts/merge.md",
@@ -16,7 +16,7 @@
     "max_tokens": 32000,
     "max_areas": 9,
     "concurrency": 3,
-    "max_turns_per_agent": 120,
+    "max_turns_per_agent": 80,
     "verify_top": 40,
     "verify_batch": 10,
     "max_cost_usd": null,

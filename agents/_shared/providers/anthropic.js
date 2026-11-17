@@ -28,14 +28,16 @@ const STOPS = {
   end_turn: 'end', tool_use: 'tool', max_tokens: 'limit', refusal: 'refusal',
 };
 
-function toWire(content) {
-  if (typeof content === 'string') return content;
-  return content.map((r) => ({
+function toWire(content, note) {
+  if (typeof content === 'string') return note ? `${content}\n\n${note}` : content;
+  const blocks = content.map((r) => ({
     type: 'tool_result',
     tool_use_id: r.id,
     content: r.output,
     ...(r.isError ? { is_error: true } : {}),
   }));
+  // A note rides after the tool results, in the same user turn.
+  return note ? [...blocks, { type: 'text', text: note }] : blocks;
 }
 
 function check(settings, env) {
@@ -61,8 +63,8 @@ function create(settings, { client } = {}) {
       }));
 
       return {
-        async send(content) {
-          messages.push({ role: 'user', content: toWire(content) });
+        async send(content, { note } = {}) {
+          messages.push({ role: 'user', content: toWire(content, note) });
           const params = {
             model: settings.model,
             max_tokens: settings.max_tokens || 32000,

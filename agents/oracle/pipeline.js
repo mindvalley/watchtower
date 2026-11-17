@@ -17,7 +17,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { collectFiles, splitAreas } = require('./areas');
+const { collectFiles, splitAreas, CONFIG_AREA } = require('./areas');
 const { fingerprint } = require('./fingerprint');
 const { SUBMIT_FINDINGS, SUBMIT_GROUPS, SUBMIT_VERDICTS } = require('./schemas');
 const { renderReport } = require('./report');
@@ -105,7 +105,10 @@ async function runOracle({
   const agent = (opts) => runAgent({ provider, meter, maxTurns: settings.max_turns_per_agent, log, ...opts });
 
   // 1 split
-  const areas = splitAreas(collectFiles(treeDir), { maxAreas: settings.max_areas });
+  // Config and operations first, then the largest areas: if the spending cap
+  // stops the run, it stops before the least productive areas, not the most.
+  const areas = splitAreas(collectFiles(treeDir), { maxAreas: settings.max_areas })
+    .sort((a, b) => Number(b.name === CONFIG_AREA) - Number(a.name === CONFIG_AREA) || b.source - a.source);
   writeJson(runDir, 'areas.json', areas);
   log(`split into ${areas.length} areas`);
 
