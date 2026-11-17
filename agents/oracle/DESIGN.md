@@ -46,7 +46,7 @@ One universal file, `watchtower.config.json`, gains an `agents` section. Each ag
   "agents": {
     "oracle": {
       "provider": "anthropic",           // any supported provider
-      "model": "claude-opus-5-5",        // user's choice; recorded in every run
+      "model": "claude-sonnet-5-5",      // default; user's choice, recorded in every run
       "key_env": "ANTHROPIC_API_KEY",    // anthropic provider: the variable to read — never the key itself
       "systems": ["web", "billing"],
       "pull_requests": false,            // report only unless switched on

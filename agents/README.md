@@ -20,7 +20,7 @@ Agents read the same `watchtower.config.json` as the scanners. Add an `agents` s
   "agents": {
     "oracle": {
       "provider": "anthropic",
-      "model": "claude-opus-5-5",
+      "model": "claude-sonnet-5-5",
       "key_env": "ANTHROPIC_API_KEY",      // the variable to read — never the key itself
       "systems": ["web"]
     }
