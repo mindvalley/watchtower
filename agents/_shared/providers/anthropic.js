@@ -10,10 +10,11 @@
  *   each turn of a long audit pays full price only for what is new.
  * - Passes the assistant's content back unchanged, thinking blocks included, as
  *   the API requires.
- * - On models that support it, asks the API to retry a refused request on a
- *   fallback model (`fallbacks: "default"`). Auditing code for security bugs can
- *   trip a safety classifier; a refused auditor would otherwise fail the run.
- *   Turn off with "fallbacks": false.
+ * - Optionally ("fallbacks": true, off by default) asks the API to retry a
+ *   refused request on a fallback model. Off by default because no refusal has
+ *   been seen in practice and a rescued step would be done by a different model;
+ *   a refusal instead fails that step loudly. Anthropic API only — Vertex has no
+ *   server-side fallback.
  */
 
 const AnthropicModule = require('@anthropic-ai/sdk');
@@ -37,9 +38,18 @@ function toWire(content) {
   }));
 }
 
+function check(settings, env) {
+  if (!settings.key_env) return 'The anthropic provider needs "key_env": the variable that holds the API key.';
+  if (!env[settings.key_env]) {
+    return `${settings.key_env} is not set. Put it in a gitignored .env beside the config, or in the `
+      + 'environment — the config only names the variable.';
+  }
+  return null;
+}
+
 function create(settings, { client } = {}) {
   const api = client || new Anthropic({ apiKey: process.env[settings.key_env], maxRetries: 4 });
-  const useFallbacks = settings.fallbacks !== false && FALLBACK_MODELS.has(settings.model);
+  const useFallbacks = settings.fallbacks === true && FALLBACK_MODELS.has(settings.model);
 
   return {
     name: 'anthropic',
@@ -94,4 +104,4 @@ function create(settings, { client } = {}) {
   };
 }
 
-module.exports = { create };
+module.exports = { create, check };

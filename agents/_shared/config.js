@@ -12,8 +12,10 @@
  * not get a file of its own, because "which systems, and how" is one question
  * and two files would be two answers to it.
  *
- * CREDENTIALS NEVER COME FROM A FILE. The config names the environment variable
- * that holds the key (`key_env`); the key itself is read from the environment.
+ * CREDENTIALS NEVER COME FROM A FILE. With the anthropic provider the config
+ * names the environment variable that holds the key (`key_env`); with vertex
+ * there is no key at all — Google login supplies the credential. Each provider
+ * checks what it needs before anything runs (providers/index.js).
  * The engine already refuses credentials in the committed config, and agents
  * follow the same rule: a setting called `key`, `token` or `secret`, or a value
  * that looks like an API key, stops the run.
@@ -22,6 +24,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const engine = require('../../scripts/benchmark/engine-config');
+const { checkProvider } = require('./providers');
 
 const CREDENTIAL_LOOKING = /^(token|password|secret|key|api_key|private_key|credential)$/i;
 const KEY_LOOKING_VALUE = /^(sk-[A-Za-z0-9_-]{16,}|sk-ant-[A-Za-z0-9_-]+)/;
@@ -78,17 +81,12 @@ function agentSettings(agentName, systemKey, { agentDir, env = process.env } = {
   const { systems, ...fleetSettings } = fleet;
   const settings = { ...defaults.settings, ...fleetSettings, ...override };
 
-  for (const field of ['provider', 'model', 'key_env']) {
+  for (const field of ['provider', 'model']) {
     if (!settings[field]) {
       throw new Error(`agents.${agentName} needs "${field}" (in agent.json or the watchtower config).`);
     }
   }
-  if (!env[settings.key_env]) {
-    throw new Error(
-      `${settings.key_env} is not set. Put it in a gitignored .env beside the config, or in the `
-      + 'environment — the config only names the variable.',
-    );
-  }
+  checkProvider(settings, env);
 
   return { settings, defaults, system };
 }

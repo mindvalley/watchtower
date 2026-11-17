@@ -10,6 +10,8 @@ const { runAgent, mapLimit, AgentError } = require('../../agents/_shared/loop');
 const { agentSettings, refuseCredentials } = require('../../agents/_shared/config');
 const { createRunDir, previousRun, writeJson, stamp } = require('../../agents/_shared/runs');
 const anthropic = require('../../agents/_shared/providers/anthropic');
+const vertex = require('../../agents/_shared/providers/vertex');
+const { checkProvider } = require('../../agents/_shared/providers');
 
 function tmpTree(files) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-agents-'));
@@ -229,7 +231,7 @@ test('run folders are dated, never overwritten, and the previous run is found', 
 
 // --- anthropic adapter ---------------------------------------------------
 
-test('anthropic adapter sends cached, streamed requests with fallbacks and maps the reply', async () => {
+test('anthropic adapter sends cached, streamed requests (fallbacks when asked) and maps the reply', async () => {
   const sent = [];
   const client = {
     beta: {
@@ -248,7 +250,7 @@ test('anthropic adapter sends cached, streamed requests with fallbacks and maps 
       },
     },
   };
-  const p = anthropic.create({ model: 'claude-opus-5-5', key_env: 'K' }, { client });
+  const p = anthropic.create({ model: 'claude-opus-5-5', key_env: 'K', fallbacks: true }, { client });
   const convo = p.conversation({ system: 'sys', tools: [{ name: 'search', description: 'd', input_schema: { type: 'object' } }] });
   const turn = await convo.send('start');
   assert.equal(turn.stop, 'tool');
@@ -265,11 +267,32 @@ test('anthropic adapter sends cached, streamed requests with fallbacks and maps 
   assert.deepEqual(second[2].content, [{ type: 'tool_result', tool_use_id: 'tu1', content: 'found' }]);
 });
 
-test('anthropic adapter leaves fallbacks off for models without them, or when turned off', async () => {
+function recordingClient(sent) {
+  return { beta: { messages: { stream: (p) => { sent.push(p); return { finalMessage: async () => ({ stop_reason: 'end_turn', content: [], usage: {} }) }; } } } };
+}
+
+test('fallbacks are off by default, and only on models that have them', async () => {
   const sent = [];
-  const client = { beta: { messages: { stream: (p) => { sent.push(p); return { finalMessage: async () => ({ stop_reason: 'end_turn', content: [], usage: {} }) }; } } } };
-  await anthropic.create({ model: 'claude-haiku-5-5', key_env: 'K' }, { client }).conversation({ system: 's', tools: [] }).send('x');
-  await anthropic.create({ model: 'claude-opus-5-5', key_env: 'K', fallbacks: false }, { client }).conversation({ system: 's', tools: [] }).send('x');
+  const client = recordingClient(sent);
+  await anthropic.create({ model: 'claude-opus-5-5', key_env: 'K' }, { client }).conversation({ system: 's', tools: [] }).send('x');
+  await anthropic.create({ model: 'claude-haiku-5-5', key_env: 'K', fallbacks: true }, { client }).conversation({ system: 's', tools: [] }).send('x');
   assert.equal(sent[0].fallbacks, undefined);
   assert.equal(sent[1].fallbacks, undefined);
+});
+
+test('vertex needs no key, only the project variable, and never asks for fallbacks', async () => {
+  assert.equal(vertex.check({}, { ANTHROPIC_VERTEX_PROJECT_ID: 'proj' }), null);
+  assert.match(vertex.check({}, {}), /ANTHROPIC_VERTEX_PROJECT_ID is not set/);
+  assert.match(vertex.check({ project_env: 'MY_PROJ' }, {}), /MY_PROJ is not set/);
+  assert.doesNotThrow(() => checkProvider({ provider: 'vertex' }, { ANTHROPIC_VERTEX_PROJECT_ID: 'p' }));
+  assert.throws(() => checkProvider({ provider: 'anthropic', key_env: 'K' }, {}), /K is not set/);
+  assert.throws(() => checkProvider({ provider: 'mystery' }, {}), /Unknown provider/);
+
+  const sent = [];
+  const p = vertex.create({ model: 'claude-opus-5-5', fallbacks: true }, { client: recordingClient(sent) });
+  assert.equal(p.name, 'vertex');
+  await p.conversation({ system: 's', tools: [] }).send('x');
+  assert.equal(sent[0].fallbacks, undefined);
+  assert.equal(sent[0].model, 'claude-opus-5-5');
+  assert.deepEqual(sent[0].cache_control, { type: 'ephemeral' });
 });

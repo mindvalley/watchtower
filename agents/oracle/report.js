@@ -42,7 +42,7 @@ function renderReport({ run, findings, rejected, bugs, areas }) {
     `${STATUS_LINE[run.status] || run.status}`,
     '',
     `Commit \`${run.commit || 'unknown'}\` · ${run.provider} / ${run.model} · prompts ${run.prompt_version} · `
-      + `$${run.cost.usd.toFixed(2)} over ${run.cost.calls} calls · ${run.started_at.slice(0, 16).replace('T', ' ')} UTC`,
+      + `~$${run.cost.usd.toFixed(2)} at Anthropic list prices over ${run.cost.calls} calls · ${run.started_at.slice(0, 16).replace('T', ' ')} UTC`,
     '',
     `**${c.findings} hidden agreements** (${c.confirmed} confirmed on a second reading, ${c.rejected} rejected and left out), `
       + `**${c.current_bugs} current bugs** (${c.security_bugs} security).`,

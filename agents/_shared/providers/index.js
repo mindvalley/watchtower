@@ -20,22 +20,35 @@
  * `tools` are { name, description, input_schema } with a JSON Schema. The adapter
  * owns the conversation history in its own wire format; agents never see it.
  *
- * To add a provider: write providers/<name>.js exporting create(settings) that
- * returns { name, model, conversation }, and add it below.
+ * Providers:
+ *   anthropic   Anthropic API, key from the variable named by `key_env`
+ *   vertex      Claude on Google Vertex AI, keyless (Google login / Workload
+ *               Identity); project from the variable named by `project_env`
+ *
+ * To add one: write providers/<name>.js exporting create(settings) and
+ * check(settings, env) (a message saying what is missing, or null), and add it
+ * below.
  */
 
 const ADAPTERS = {
   anthropic: () => require('./anthropic'),
+  vertex: () => require('./vertex'),
 };
 
-function createProvider(settings) {
-  const load = ADAPTERS[settings.provider];
-  if (!load) {
-    throw new Error(
-      `Unknown provider '${settings.provider}'. Supported: ${Object.keys(ADAPTERS).join(', ')}.`,
-    );
-  }
-  return load().create(settings);
+function adapter(name) {
+  const load = ADAPTERS[name];
+  if (!load) throw new Error(`Unknown provider '${name}'. Supported: ${Object.keys(ADAPTERS).join(', ')}.`);
+  return load();
 }
 
-module.exports = { createProvider, PROVIDERS: Object.keys(ADAPTERS) };
+// What the provider needs from the environment, checked before anything runs.
+function checkProvider(settings, env = process.env) {
+  const problem = adapter(settings.provider).check(settings, env);
+  if (problem) throw new Error(problem);
+}
+
+function createProvider(settings) {
+  return adapter(settings.provider).create(settings);
+}
+
+module.exports = { createProvider, checkProvider, PROVIDERS: Object.keys(ADAPTERS) };

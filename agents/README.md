@@ -22,8 +22,7 @@ Agents read the same `watchtower.config.json` as the scanners. Add an `agents` s
       "provider": "anthropic",
       "model": "claude-opus-5-5",
       "key_env": "ANTHROPIC_API_KEY",      // the variable to read — never the key itself
-      "systems": ["web"],
-      "max_cost_usd": 40
+      "systems": ["web"]
     }
   },
   "systems": {
@@ -32,7 +31,9 @@ Agents read the same `watchtower.config.json` as the scanners. Add an `agents` s
 }
 ```
 
-Put the key in a gitignored `.env` beside the config (or export it), then:
+With `"provider": "anthropic"`, put the key in a gitignored `.env` beside the config (or export it). With
+`"provider": "vertex"` there is no key: set `ANTHROPIC_VERTEX_PROJECT_ID` and log in to Google
+(`gcloud auth application-default login` locally; Workload Identity Federation in CI). Then:
 
 ```sh
 node agents/oracle/run.js --system web
@@ -44,6 +45,10 @@ The run lands in `runs/oracle/web/<YYYY-MM-DD-HHMM>/` (`WATCHTOWER_RUNS` to move
   `_shared/providers/`, and each provider is an adapter. Quality was measured on one model; a cheaper one may find less
   or invent more, and every run records which model made it.
 - **Credentials never in the config.** As with the scanners, a key in a committed file stops the run.
+- **Spending cap** (`max_cost_usd`) is off by default. When set it counts at Anthropic API list prices whatever the
+  provider, so on Vertex it is an estimate, not your bill.
+- **Refusals fail loudly.** If the model declines a step, that step fails and the run says so; nothing is reported as
+  clean. An automatic retry on a fallback model exists for the Anthropic provider (`"fallbacks": true`), off by default.
 - **Settings, later ones winning:** the agent's `agent.json` → `agents.<name>` in the config → `systems.<s>.agents.<name>`.
 
 ## Layout

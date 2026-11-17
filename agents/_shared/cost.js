@@ -4,8 +4,11 @@
  * What a run has spent, and whether the next call may start.
  *
  * Prices are dollars per million tokens, per model, from agent.json (or the
- * config, to override). A model with no price and a spending cap is refused:
- * a cap that cannot count is not a cap.
+ * config, to override): Anthropic API list prices. The cap is off unless
+ * max_cost_usd is set. It always counts at those prices, whichever provider
+ * serves the requests — on Vertex, which bills at Google's rates, the figure is
+ * an estimate. A model with no price and a cap set is refused: a cap that cannot
+ * count is not a cap.
  *
  * The check is made BEFORE each call, against what has been spent so far plus
  * a reserve for the call about to start. Checking only after a call lets the
@@ -64,7 +67,13 @@ class CostMeter {
   }
 
   summary() {
-    return { usd: Math.round(this.usd * 100) / 100, calls: this.calls, tokens: { ...this.tokens }, cap_usd: this.capUsd };
+    return {
+      usd: Math.round(this.usd * 100) / 100,
+      basis: 'Anthropic API list prices',
+      calls: this.calls,
+      tokens: { ...this.tokens },
+      cap_usd: this.capUsd,
+    };
   }
 }
 

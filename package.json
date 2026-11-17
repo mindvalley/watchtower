@@ -16,6 +16,7 @@
     "js-yaml": "^4.3.2"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^1.8.0"
+    "@anthropic-ai/sdk": "^1.8.0",
+    "@anthropic-ai/vertex-sdk": "^1.1.3"
   }
 }

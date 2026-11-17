@@ -47,11 +47,11 @@ One universal file, `watchtower.config.json`, gains an `agents` section. Each ag
     "oracle": {
       "provider": "anthropic",           // any supported provider
       "model": "claude-opus-5-5",        // user's choice; recorded in every run
-      "key_env": "ANTHROPIC_API_KEY",    // the variable to read — never the key itself
+      "key_env": "ANTHROPIC_API_KEY",    // anthropic provider: the variable to read — never the key itself
       "systems": ["web", "billing"],
       "pull_requests": false,            // report only unless switched on
       "max_pull_requests": 3,            // per run, one PR per finding
-      "max_cost_usd": 40                 // the run stops before passing this
+      "max_cost_usd": null               // off by default; Anthropic list prices when set
     }
   },
   "systems": {
@@ -62,7 +62,16 @@ One universal file, `watchtower.config.json`, gains an `agents` section. Each ag
 ```
 
 - **Keys never go in a config file.** The engine already refuses credentials in the committed config; agents follow
-  the same rule. Locally the variable comes from a gitignored `.env`; remotely from a repository secret.
+  the same rule. Two providers ship:
+  - `anthropic` — the Anthropic API; the key comes from the variable `key_env` names (a gitignored `.env` locally).
+  - `vertex` — Claude on Google Vertex AI, **keyless**: Google Application Default Credentials (gcloud locally;
+    Workload Identity Federation in CI, as the fleet's other agents already run). The config names the project
+    variable (`project_env`, default `ANTHROPIC_VERTEX_PROJECT_ID`) and the region (default `global`).
+- **Spending cap — limitation.** `max_cost_usd` is off by default. When set it counts at Anthropic API list prices
+  (`prices` in `agent.json`) whichever provider serves the requests, so on Vertex it is an estimate, not the bill.
+- **Refusals.** A step the model declines fails loudly; the run is marked failed and the area not audited. The
+  Anthropic provider can retry on a fallback model (`"fallbacks": true`, off by default); Vertex has no server-side
+  fallback. Kept off until refusals are seen in practice.
 - **Provider and model are the user's choice.** The provider layer exposes one interface (chat with tools); adding a
   provider is an adapter. Quality was measured on one model only — a cheaper model may find less or invent more, so
   `run.json` records provider and model, and a run on a new model should be checked before it is trusted (see
@@ -106,8 +115,9 @@ key in `.env`. Writes the run folder. Publishes nothing, raises no PRs unless `p
 present.
 
 **Remote** — a separate workflow in the private config repo, `oracle.yaml`, in the style of `scan.yaml`: weekly cron,
-one job per system, the engine action pinned to a tag, a GitHub App token scoped to the targets (read, plus pull
-requests only for systems that opted in), OIDC for the dashboard. Storage is split by kind:
+one job per system on GitHub-hosted runners, the engine action pinned to a tag, `id-token: write`, Google auth through
+Workload Identity Federation for Vertex (no model key anywhere), a GitHub App token scoped to the targets (read, plus
+pull requests only for systems that opted in), OIDC for the dashboard. Storage is split by kind:
 - **Files → the private config repo.** The run folder is committed under `runs/`. Permanent, readable history, and the
   previous run for step 5. It holds security findings, so that repository stays private with tight access.
 - **Values → the dashboard.** A small summary per run through `/ingest` (findings, new, fixed, broke, PRs raised and
@@ -144,5 +154,5 @@ requests only for systems that opted in), OIDC for the dashboard. Storage is spl
 - **Fingerprints.** Findings are written by a model, so wording varies between runs; the fingerprint must rest on the
   places (files, symbols) and the kind of agreement, not the text. Needs testing across two runs of the same commit.
 - **Run-to-run variation.** Not yet measured: how much two runs on the same commit agree.
-- **Cost.** Not yet measured per run; the cap guards it. First runs record it.
+- **Cost.** Not yet measured per run. First runs record an estimate at Anthropic list prices.
 - **Team consent** before PRs are switched on for any team's repository.
