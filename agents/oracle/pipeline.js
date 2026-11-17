@@ -22,7 +22,7 @@ const { fingerprint } = require('./fingerprint');
 const { SUBMIT_FINDINGS, SUBMIT_GROUPS, SUBMIT_VERDICTS } = require('./schemas');
 const { renderReport } = require('./report');
 const { treeTools } = require('../_shared/tools');
-const { runAgent, mapLimit } = require('../_shared/loop');
+const { runAgent, mapLimit, AgentError } = require('../_shared/loop');
 const { CostCapError } = require('../_shared/cost');
 const { writeJson, writeText } = require('../_shared/runs');
 
@@ -102,7 +102,19 @@ async function runOracle({
     problems.push(`${step}: ${err.message}`);
     return false;
   };
-  const agent = (opts) => runAgent({ provider, meter, maxTurns: settings.max_turns_per_agent, log, ...opts });
+  // One more attempt after a provider failure (a 5xx, "try again", a dropped
+  // connection) that survived the SDK's own retries. Never after the spending cap
+  // or an agent failure (refusal, no answer): those would fail the same way.
+  const agent = async (opts) => {
+    const run = () => runAgent({ provider, meter, maxTurns: settings.max_turns_per_agent, log, ...opts });
+    try {
+      return await run();
+    } catch (err) {
+      if (err instanceof CostCapError || err instanceof AgentError) throw err;
+      log(`${opts.label}: provider error, retrying once (${String(err.message).slice(0, 120)})`);
+      return run();
+    }
+  };
 
   // 1 split
   // Config and operations first, then the largest areas: if the spending cap

@@ -87,7 +87,8 @@ test('merge unions places, keeps the strongest rating, and never drops a finding
 
 // --- pipeline end to end, with a scripted provider -------------------------
 
-function scriptedProvider({ failArea } = {}) {
+function scriptedProvider({ failArea, flakyArea } = {}) {
+  let flaked = false;
   return {
     conversation({ system }) {
       const kind = /Group findings/.test(system) ? 'merge' : /Check findings/.test(system) ? 'verify' : 'audit';
@@ -97,6 +98,7 @@ function scriptedProvider({ failArea } = {}) {
           if (kind === 'audit') {
             const area = String(content).match(/starting area: (.*)\n/)?.[1] || '';
             if (failArea && area === failArea) return { toolCalls: [], text: '', stop: 'refusal', usage, model: 'm' };
+            if (flakyArea && area === flakyArea && !flaked) { flaked = true; throw new Error('Unable to complete this request right now'); }
             return {
               stop: 'tool', usage, model: 'm', text: '',
               toolCalls: [{
@@ -156,6 +158,16 @@ test('a failed auditor marks its area not audited and the run failed — never c
   assert.equal(run.status, 'failed');
   assert.deepEqual(run.not_audited, ['src']);
   assert.match(fs.readFileSync(path.join(runDir, 'report.md'), 'utf8'), /\*\*Not audited:\*\* src/);
+});
+
+test('a transient provider error is retried once, and the area is still audited', async () => {
+  const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-oracle-run-'));
+  const run = await runOracle({
+    systemKey: 'web', settings: SETTINGS, defaults: DEFAULTS, agentDir: AGENT_DIR,
+    provider: scriptedProvider({ flakyArea: 'src' }), treeDir: fixtureTree(), runDir, meter: new CostMeter({}),
+  });
+  assert.equal(run.status, 'complete');
+  assert.deepEqual(run.not_audited, []);
 });
 
 test('the spending cap stops the run as incomplete, with what was done kept', async () => {
