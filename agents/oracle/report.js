@@ -11,7 +11,7 @@ const STATUS_LINE = {
   failed: 'Failed in part — see "Run problems". Areas not audited are listed; they are not clean.',
 };
 
-const esc = (s) => String(s ?? '').replace(/\|/g, '\\|').replace(/\n+/g, ' ');
+const esc = (s) => String(s ?? '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n+/g, ' ');
 
 function findingBlock(f, n) {
   const v = f.verification;
