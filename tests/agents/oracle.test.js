@@ -91,9 +91,10 @@ test('merge unions places, keeps the strongest rating, and never drops a finding
 
 // --- pipeline end to end, with a scripted provider -------------------------
 
-function scriptedProvider({ failArea, flakyArea } = {}) {
+function scriptedProvider({ failArea, flakyArea, mergeApart, reject, tooLongArea } = {}) {
   let flaked = false;
-  return {
+  const provider = {
+    tooLongAttempts: 0,
     conversation({ system }) {
       const kind = /Group findings/.test(system) ? 'merge' : /Check findings/.test(system) ? 'verify' : 'audit';
       return {
@@ -103,6 +104,10 @@ function scriptedProvider({ failArea, flakyArea } = {}) {
             const area = String(content).match(/starting area: (.*)\n/)?.[1] || '';
             if (failArea && area === failArea) return { toolCalls: [], text: '', stop: 'refusal', usage, model: 'm' };
             if (flakyArea && area === flakyArea && !flaked) { flaked = true; throw new Error('Unable to complete this request right now'); }
+            if (tooLongArea && area === tooLongArea) {
+              provider.tooLongAttempts += 1;
+              throw Object.assign(new Error('prompt is too long'), { status: 400 });
+            }
             return {
               stop: 'tool', usage, model: 'm', text: '',
               toolCalls: [{
@@ -115,13 +120,15 @@ function scriptedProvider({ failArea, flakyArea } = {}) {
           }
           const items = JSON.parse(content);
           if (kind === 'merge') {
-            return { stop: 'tool', usage, model: 'm', text: '', toolCalls: [{ id: 'g', name: 'submit_groups', input: { groups: [items.map((i) => i.id)] } }] };
+            const groups = mergeApart ? items.map((i) => [i.id]) : [items.map((i) => i.id)];
+            return { stop: 'tool', usage, model: 'm', text: '', toolCalls: [{ id: 'g', name: 'submit_groups', input: { groups } }] };
           }
-          return { stop: 'tool', usage, model: 'm', text: '', toolCalls: [{ id: 'v', name: 'submit_verdicts', input: { verdicts: items.map((i) => ({ id: i.id, verdict: 'confirmed', note: 'read both' })) } }] };
+          return { stop: 'tool', usage, model: 'm', text: '', toolCalls: [{ id: 'v', name: 'submit_verdicts', input: { verdicts: items.map((i) => ({ id: i.id, verdict: reject && i.agreement.includes(reject) ? 'rejected' : 'confirmed', note: 'read both' })) } }] };
         },
       };
     },
   };
+  return provider;
 }
 
 function fixtureTree() {
@@ -184,4 +191,16 @@ test('the spending cap stops the run as incomplete, with what was done kept', as
   assert.equal(run.status, 'incomplete');
   assert.ok(run.counts.raw_findings >= 1);
   assert.match(fs.readFileSync(path.join(runDir, 'report.md'), 'utf8'), /stopped at the spending cap/);
+});
+
+test('"failed" status is not overriden by "incomplete"', async () => {
+  const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-oracle-run-'));
+  const meter = new CostMeter({ prices: { m: { input: 4000, output: 20000 } }, capUsd: 5, reserveUsd: 0, model: 'm' });
+  const run = await runOracle({
+    systemKey: 'web', settings: { ...SETTINGS, concurrency: 1 }, defaults: DEFAULTS, agentDir: AGENT_DIR,
+    provider: scriptedProvider({ failArea: CONFIG_AREA }), treeDir: fixtureTree(), runDir, meter,
+  });
+  assert.deepEqual(run.not_audited, [CONFIG_AREA, 'src']);
+  assert.ok(run.problems.some((p) => p.includes('model declined')));
+  assert.equal(run.status, 'failed');
 });

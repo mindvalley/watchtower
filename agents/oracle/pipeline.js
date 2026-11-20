@@ -96,10 +96,18 @@ async function runOracle({
   const tools = treeTools(treeDir);
   const problems = [];
   let status = 'complete';
+  // Whether the spending cap has been reached, kept apart from the status: a run
+  // that has already failed stays failed when the cap then stops it, and a
+  // failure after the cap still marks it failed. Failed outranks incomplete.
+  let capped = false;
   const stopOn = (err, step) => {
-    if (err instanceof CostCapError) { status = 'incomplete'; problems.push(`${step}: ${err.message}`); return true; }
-    status = 'failed';
     problems.push(`${step}: ${err.message}`);
+    if (err instanceof CostCapError) {
+      capped = true;
+      if (status === 'complete') status = 'incomplete';
+      return true;
+    }
+    status = 'failed';
     return false;
   };
   // One more attempt after a provider failure (a 5xx, "try again", a dropped
@@ -128,7 +136,7 @@ async function runOracle({
   const audited = [];
   const notAudited = [];
   await mapLimit(areas, settings.concurrency, async (area) => {
-    if (status === 'incomplete') { notAudited.push(area.name); return; }
+    if (capped) { notAudited.push(area.name); return; }
     try {
       const out = await agent({
         system: prompts.audit, prompt: auditMessage(area), tools, submit: SUBMIT_FINDINGS, label: `audit ${area.name}`,
@@ -150,7 +158,7 @@ async function runOracle({
 
   // 3 merge
   let merged = mergeGroups(findings, findings.map((f) => [f.id]));
-  if (findings.length > 1 && status !== 'incomplete') {
+  if (findings.length > 1 && !capped) {
     try {
       const listing = findings.map(({ id, places, agreement }) => ({ id, places, agreement }));
       const { groups } = await agent({
@@ -166,9 +174,9 @@ async function runOracle({
   const toVerify = merged.slice(0, settings.verify_top);
   const batches = [];
   for (let i = 0; i < toVerify.length; i += settings.verify_batch) batches.push(toVerify.slice(i, i + settings.verify_batch));
-  if (status !== 'incomplete') {
+  if (!capped) {
     await mapLimit(batches, settings.concurrency, async (batch, i) => {
-      if (status === 'incomplete') return;
+      if (capped) return;
       try {
         const listing = batch.map((f) => ({ id: f.fingerprint, places: f.places, agreement: f.agreement, unguarded: f.unguarded }));
         const { verdicts } = await agent({
