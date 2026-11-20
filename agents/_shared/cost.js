@@ -12,7 +12,8 @@
  *
  * The check is made BEFORE each call, against what has been spent so far plus
  * a reserve for the call about to start. Checking only after a call lets the
- * last one run the bill past the cap.
+ * last one run the bill past the cap. Calls still running in other agents are
+ * held against the cap too (see beforeCall).
  */
 
 class CostCapError extends Error {
@@ -38,6 +39,9 @@ class CostMeter {
     this.usd = 0;
     this.tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
     this.calls = 0;
+    this.maxCallUsd = 0; // the most expensive single call so far
+    this.inFlight = 0; // calls started and not yet released
+    this.waiting = []; // callers waiting for a running call to finish
   }
 
   requirePrice(model) {
@@ -49,10 +53,41 @@ class CostMeter {
     }
   }
 
-  beforeCall() {
-    if (this.capUsd != null && this.usd + this.reserveUsd > this.capUsd) {
-      throw new CostCapError(this.usd, this.capUsd);
+  // Waits until the next call may start, then holds room for it under the cap.
+  // Resolves to a release function: call it once the send has finished, whether
+  // it succeeded or threw (after add() when it succeeded).
+  //
+  // Agents running at once share one meter, so a call must also leave room for
+  // the calls still running, which have not been counted yet:
+  //   - until a call has finished, nobody knows what one costs, so calls run
+  //     one at a time;
+  //   - after that, each running call is held at the larger of the reserve and
+  //     the most expensive call seen so far.
+  // A call that does not fit waits while others are running (they may cost
+  // less than held), and is refused once none are. One agent alone always
+  // checks spent + reserve, as before.
+  async beforeCall() {
+    while (this.capUsd != null) {
+      if (this.calls === 0 && this.inFlight > 0) { await this.nextRelease(); continue; }
+      const held = this.inFlight * Math.max(this.reserveUsd, this.maxCallUsd);
+      if (this.usd + held + this.reserveUsd <= this.capUsd) break;
+      if (this.inFlight === 0) throw new CostCapError(this.usd, this.capUsd);
+      await this.nextRelease();
     }
+    this.inFlight += 1;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.inFlight -= 1;
+      const waiting = this.waiting;
+      this.waiting = [];
+      waiting.forEach((wake) => wake());
+    };
+  }
+
+  nextRelease() {
+    return new Promise((resolve) => { this.waiting.push(resolve); });
   }
 
   add(usage, model) {
@@ -60,10 +95,12 @@ class CostMeter {
     for (const k of Object.keys(this.tokens)) this.tokens[k] += usage[k] || 0;
     const p = priceFor(this.prices, model) || priceFor(this.prices, this.model);
     if (!p) return;
-    this.usd += ((usage.input || 0) * p.input
+    const usd = ((usage.input || 0) * p.input
       + (usage.output || 0) * p.output
       + (usage.cacheRead || 0) * (p.cache_read ?? p.input)
       + (usage.cacheWrite || 0) * (p.cache_write ?? p.input)) / 1e6;
+    this.usd += usd;
+    this.maxCallUsd = Math.max(this.maxCallUsd, usd);
   }
 
   summary() {

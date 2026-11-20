@@ -34,15 +34,20 @@ async function runAgent({
   let next = prompt;
 
   for (let turnNo = 1; turnNo <= maxTurns; turnNo += 1) {
-    meter.beforeCall();
     const left = maxTurns - turnNo;
     // Sent whatever the turn carries — tool results, or the nudge after a text
     // reply — so a reply in text on the wrong turn cannot skip the warning.
     const note = left === WRAP_UP_TURNS
       ? `${left} turns left. Finish what you are checking and call ${submit.name} with what you have confirmed.`
       : undefined;
-    const turn = await convo.send(next, note ? { note } : undefined);
-    meter.add(turn.usage, turn.model);
+    const release = await meter.beforeCall();
+    let turn;
+    try {
+      turn = await convo.send(next, note ? { note } : undefined);
+      meter.add(turn.usage, turn.model);
+    } finally {
+      release();
+    }
 
     if (turn.stop === 'refusal') throw new AgentError('the model declined the request', { label });
     if (turn.stop === 'limit') throw new AgentError('the answer hit the output limit; raise max_tokens', { label });

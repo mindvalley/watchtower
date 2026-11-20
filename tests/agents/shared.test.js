@@ -85,13 +85,38 @@ test('list_files skips .git and build output', () => {
 
 // --- cost ----------------------------------------------------------------
 
-test('cost meter prices tokens and stops before the cap', () => {
+test('cost meter prices tokens and stops before the cap', async () => {
   const m = new CostMeter({ prices: { m: { input: 4, output: 20, cache_read: 0.2, cache_write: 5 } }, capUsd: 1, reserveUsd: 0.25, model: 'm' });
   m.add({ input: 100_000, output: 10_000, cacheRead: 0, cacheWrite: 0 }, 'm'); // 0.4 + 0.2
   assert.equal(m.summary().usd, 0.6);
-  m.beforeCall();
+  const release = await m.beforeCall();
   m.add({ input: 50_000 }, 'other-model'); // priced as the configured model: 0.2
-  assert.throws(() => m.beforeCall(), CostCapError);
+  release();
+  await assert.rejects(m.beforeCall(), CostCapError);
+});
+
+test('a call that throws releases its hold on the cap', { timeout: 2000 }, async () => {
+  const meter = new CostMeter({ prices: { m: { input: 1000, output: 0 } }, capUsd: 10, reserveUsd: 0.5, model: 'm' });
+  let sends = 0;
+  const provider = {
+    conversation() {
+      return {
+        async send() {
+          sends += 1;
+          if (sends === 1) throw new Error('connection dropped');
+          return { stop: 'tool', text: '', model: 'm', usage: { input: 1000, output: 0 }, toolCalls: [{ id: 's', name: 'submit_answer', input: { ok: true } }] };
+        },
+      };
+    },
+  };
+  const go = () => runAgent({ provider, system: 's', prompt: 'go', tools: treeTools(tmpTree({ a: '' })), submit: SUBMIT, meter });
+  // The second agent waits behind the first (no call has finished yet); it can
+  // only start if the first agent's failed send gave its hold back.
+  const [first, second] = await Promise.allSettled([go(), go()]);
+  assert.equal(first.status, 'rejected');
+  assert.match(first.reason.message, /connection dropped/);
+  assert.deepEqual(second.value, { ok: true });
+  assert.equal(meter.summary().usd, 1);
 });
 
 test('a cap with no price for the model is refused', () => {
@@ -205,6 +230,15 @@ test('mapLimit keeps order and caps concurrency', async () => {
   });
   assert.deepEqual(out, [2, 4, 6, 8, 10]);
   assert.equal(peak, 2);
+});
+
+test('concurrent agents do not exceed the cost cap', async () => {
+  const meter = new CostMeter({ prices: { m: { input: 1000, output: 0 } }, capUsd: 1.2, reserveUsd: 0.5, model: 'm' });
+  const provider = fakeProvider([{ stop: 'tool', toolCalls: [{ id: 's', name: 'submit_answer', input: {} }], usage: { input: 1000, output: 0 } }]);
+  await mapLimit([1, 2, 3], 3, () => runAgent({
+    provider, system: 's', prompt: 'go', tools: treeTools(tmpTree({ a: '' })), submit: SUBMIT, meter,
+  }).catch((err) => { if (!(err instanceof CostCapError)) throw err; }));
+  assert.ok(meter.summary().usd <= 1.2, `spent $${meter.summary().usd} against a $1.20 cap`);
 });
 
 // --- config --------------------------------------------------------------
