@@ -31,6 +31,12 @@ const score = (f) => (LEVEL[f.likelihood] || 1) * (LEVEL[f.harm] || 1);
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const NO_TOOLS = { defs: [], has: () => false, run: () => ({ output: 'no tools in this step', isError: true }) };
 
+// A 4xx the provider will give again on a second attempt. 408 (timeout), 409
+// (conflict) and 429 (rate limit) are transient, so they may be retried.
+const TRANSIENT_4XX = new Set([408, 409, 429]);
+const rejectedRequest = (err) => Number.isInteger(err && err.status)
+  && err.status >= 400 && err.status < 500 && !TRANSIENT_4XX.has(err.status);
+
 function loadPrompts(agentDir, defaults) {
   const out = {};
   for (const [k, rel] of Object.entries(defaults.prompts)) out[k] = fs.readFileSync(path.join(agentDir, rel), 'utf8');
@@ -111,14 +117,15 @@ async function runOracle({
     return false;
   };
   // One more attempt after a provider failure (a 5xx, "try again", a dropped
-  // connection) that survived the SDK's own retries. Never after the spending cap
-  // or an agent failure (refusal, no answer): those would fail the same way.
+  // connection) that survived the SDK's own retries. Never after the spending cap,
+  // an agent failure (refusal, no answer), or a request the provider rejected as
+  // invalid (a 4xx such as "prompt is too long"): those would fail the same way.
   const agent = async (opts) => {
     const run = () => runAgent({ provider, meter, maxTurns: settings.max_turns_per_agent, log, ...opts });
     try {
       return await run();
     } catch (err) {
-      if (err instanceof CostCapError || err instanceof AgentError) throw err;
+      if (err instanceof CostCapError || err instanceof AgentError || rejectedRequest(err)) throw err;
       log(`${opts.label}: provider error, retrying once (${String(err.message).slice(0, 120)})`);
       return run();
     }

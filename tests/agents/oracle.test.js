@@ -218,3 +218,13 @@ test('two findings in the same file report separately', async () => {
     'port copied (src)': 'rejected',
   });
 });
+
+test('an area is not retried after the model says the conversation is too long', async () => {
+  const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-oracle-run-'));
+  const provider = scriptedProvider({ tooLongArea: 'src' });
+  await runOracle({
+    systemKey: 'web', settings: SETTINGS, defaults: DEFAULTS, agentDir: AGENT_DIR,
+    provider, treeDir: fixtureTree(), runDir, meter: new CostMeter({}),
+  });
+  assert.equal(provider.tooLongAttempts, 1);
+});
