@@ -17,9 +17,12 @@
 const crypto = require('node:crypto');
 
 // "apps/web/src/lib/api-client.ts:21 (NEXT_PUBLIC_API_URL)" -> "apps/web/src/lib/api-client.ts"
+// Parentheses inside the path are kept: Next.js route groups name folders like
+// "app/(marketing)/page.tsx". Only a parenthesis after the file name, with no
+// folder after it ("a.ts(PORT)"), is commentary.
 function placeFile(place) {
   const first = String(place).trim().split(/\s+/)[0] || '';
-  return first.replace(/[:(].*$/, '').replace(/^\.\//, '').replace(/[,;]+$/, '');
+  return first.replace(/:.*$/, '').replace(/(?<=[^/])\([^/]*$/, '').replace(/^\.\//, '').replace(/[,;]+$/, '');
 }
 
 function placeFiles(places) {

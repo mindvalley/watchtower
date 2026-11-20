@@ -68,6 +68,10 @@ test('fingerprints rest on the files named, not the wording', () => {
   assert.notEqual(a, fingerprint(['a.ts', 'c.ts']));
 });
 
+test('folders can have parenthesis in their names', () => {
+  assert.equal(placeFile('app/(marketing)/page.tsx:12'), 'app/(marketing)/page.tsx');
+});
+
 // --- merge ---------------------------------------------------------------
 
 test('merge unions places, keeps the strongest rating, and never drops a finding', () => {
