@@ -36,7 +36,9 @@ async function runAgent({
   for (let turnNo = 1; turnNo <= maxTurns; turnNo += 1) {
     meter.beforeCall();
     const left = maxTurns - turnNo;
-    const note = Array.isArray(next) && left === WRAP_UP_TURNS
+    // Sent whatever the turn carries — tool results, or the nudge after a text
+    // reply — so a reply in text on the wrong turn cannot skip the warning.
+    const note = left === WRAP_UP_TURNS
       ? `${left} turns left. Finish what you are checking and call ${submit.name} with what you have confirmed.`
       : undefined;
     const turn = await convo.send(next, note ? { note } : undefined);

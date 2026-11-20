@@ -155,6 +155,26 @@ test('the loop warns the agent ten turns before its limit, once', async () => {
   assert.match(warned[0][0], /10 turns left.*submit_answer/);
 });
 
+test('the model is told it has ten turns left even if its previous reply was text', async () => {
+  const root = tmpTree({ 'a.ts': 'x' });
+  const listFiles = { stop: 'tool', toolCalls: [{ id: 't', name: 'list_files', input: {} }] };
+  const p = fakeProvider([listFiles, listFiles, listFiles, { stop: 'end', text: 'thinking out loud' }, listFiles]);
+  const notes = [];
+  const provider = {
+    conversation(opts) {
+      const c = p.conversation(opts);
+      return { send: (content, extra) => { notes.push(extra && extra.note); return c.send(content); } };
+    },
+  };
+  await assert.rejects(
+    runAgent({ provider, system: 's', prompt: 'go', tools: treeTools(root), submit: SUBMIT, meter: new CostMeter({}), maxTurns: 15 }),
+    /no answer after 15 turns/,
+  );
+  assert.deepEqual(notes.filter(Boolean), [
+    '10 turns left. Finish what you are checking and call submit_answer with what you have confirmed.',
+  ]);
+});
+
 test('the loop nudges once, then fails an agent that never submits', async () => {
   const p = fakeProvider([{ stop: 'end', text: 'done!' }]);
   await assert.rejects(
