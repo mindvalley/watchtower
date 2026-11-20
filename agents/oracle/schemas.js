@@ -15,7 +15,7 @@ const SUBMIT_FINDINGS = {
         items: {
           type: 'object',
           properties: {
-            places: { type: 'array', items: { type: 'string' } },
+            places: { type: 'array', items: { type: 'string' }, minItems: 1 },
             agreement: { type: 'string' },
             unguarded: { type: 'string' },
             trigger: { type: 'string' },
@@ -32,7 +32,7 @@ const SUBMIT_FINDINGS = {
         items: {
           type: 'object',
           properties: {
-            places: { type: 'array', items: { type: 'string' } },
+            places: { type: 'array', items: { type: 'string' }, minItems: 1 },
             what: { type: 'string' },
             security: { type: 'boolean' },
           },
