@@ -61,16 +61,24 @@ class CostMeter {
   // the calls still running, which have not been counted yet:
   //   - until a call has finished, nobody knows what one costs, so calls run
   //     one at a time;
-  //   - after that, each running call is held at the larger of the reserve and
-  //     the most expensive call seen so far.
+  //   - after that, each running call, and a new call that would run beside
+  //     them, is held at the larger of the reserve and the most expensive call
+  //     seen so far.
   // A call that does not fit waits while others are running (they may cost
   // less than held), and is refused once none are. One agent alone always
   // checks spent + reserve, as before.
+  //
+  // Waiters are not served in order: every release wakes them all, and an agent
+  // that has just released may take the room again before them. And the cap
+  // bounds the estimate, not the bill: a call can cost more than the largest
+  // seen so far, or than the reserve, and take the total past the cap.
   async beforeCall() {
     while (this.capUsd != null) {
       if (this.calls === 0 && this.inFlight > 0) { await this.nextRelease(); continue; }
-      const held = this.inFlight * Math.max(this.reserveUsd, this.maxCallUsd);
-      if (this.usd + held + this.reserveUsd <= this.capUsd) break;
+      const perCall = Math.max(this.reserveUsd, this.maxCallUsd);
+      const held = this.inFlight * perCall;
+      const own = this.inFlight > 0 ? perCall : this.reserveUsd;
+      if (this.usd + held + own <= this.capUsd) break;
       if (this.inFlight === 0) throw new CostCapError(this.usd, this.capUsd);
       await this.nextRelease();
     }

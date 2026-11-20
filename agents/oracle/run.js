@@ -14,6 +14,7 @@
  * and only read. Nothing is published and no pull request is opened.
  *
  * Exit codes: 0 complete · 1 failed (in part) · 2 stopped at the spending cap.
+ * A run that hit the cap and also failed exits 1: failed outranks the cap.
  */
 
 const { execFileSync } = require('node:child_process');

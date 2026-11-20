@@ -95,6 +95,22 @@ test('cost meter prices tokens and stops before the cap', async () => {
   await assert.rejects(m.beforeCall(), CostCapError);
 });
 
+test('a call next to a running one is held at the largest call seen, not the reserve', async () => {
+  const m = new CostMeter({ prices: { m: { input: 1000, output: 0 } }, capUsd: 2.8, reserveUsd: 0.5, model: 'm' });
+  const first = await m.beforeCall();
+  m.add({ input: 1000 }, 'm'); // $1: the largest call so far
+  first();
+  const running = await m.beforeCall();
+  // spent 1 + running 1 + reserve 0.5 = 2.5 would fit; + largest call 1 = 3 does not.
+  let started = false;
+  const next = m.beforeCall().then((release) => { started = true; return release; });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(started, false, 'the second call started though the largest call seen does not fit');
+  running(); // the running call fails: nothing spent, and now alone it fits
+  (await next)();
+  assert.equal(started, true);
+});
+
 test('a call that throws releases its hold on the cap', { timeout: 2000 }, async () => {
   const meter = new CostMeter({ prices: { m: { input: 1000, output: 0 } }, capUsd: 10, reserveUsd: 0.5, model: 'm' });
   let sends = 0;
