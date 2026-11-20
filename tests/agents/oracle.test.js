@@ -204,3 +204,17 @@ test('"failed" status is not overriden by "incomplete"', async () => {
   assert.ok(run.problems.some((p) => p.includes('model declined')));
   assert.equal(run.status, 'failed');
 });
+
+test('two findings in the same file report separately', async () => {
+  const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-oracle-run-'));
+  await runOracle({
+    systemKey: 'web', settings: SETTINGS, defaults: DEFAULTS, agentDir: AGENT_DIR,
+    provider: scriptedProvider({ mergeApart: true, reject: '(src)' }), treeDir: fixtureTree(), runDir, meter: new CostMeter({}),
+  });
+  const { findings, rejected } = JSON.parse(fs.readFileSync(path.join(runDir, 'findings.json'), 'utf8'));
+  const verdicts = Object.fromEntries([...findings, ...rejected].map((f) => [f.agreement, f.verification.verdict]));
+  assert.deepEqual(verdicts, {
+    'port copied (config and operations)': 'confirmed',
+    'port copied (src)': 'rejected',
+  });
+});

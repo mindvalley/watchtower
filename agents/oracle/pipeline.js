@@ -178,13 +178,16 @@ async function runOracle({
     await mapLimit(batches, settings.concurrency, async (batch, i) => {
       if (capped) return;
       try {
-        const listing = batch.map((f) => ({ id: f.fingerprint, places: f.places, agreement: f.agreement, unguarded: f.unguarded }));
+        // Ids by position, not fingerprint: two agreements between the same files
+        // share a fingerprint, and each needs its own verdict.
+        const idOf = (j) => `${i * settings.verify_batch + j + 1}`;
+        const listing = batch.map((f, j) => ({ id: idOf(j), places: f.places, agreement: f.agreement, unguarded: f.unguarded }));
         const { verdicts } = await agent({
           system: prompts.verify, prompt: JSON.stringify(listing), tools, submit: SUBMIT_VERDICTS, label: `verify batch ${i + 1}`,
         });
-        const byId = new Map((verdicts || []).map((v) => [v.id, v]));
-        for (const f of batch) {
-          const v = byId.get(f.fingerprint);
+        const byId = new Map((verdicts || []).map((v) => [String(v.id), v]));
+        for (const [j, f] of batch.entries()) {
+          const v = byId.get(idOf(j));
           f.verification = v ? { verdict: v.verdict, note: v.note } : { verdict: 'unsure', note: 'no verdict returned' };
         }
       } catch (err) {
