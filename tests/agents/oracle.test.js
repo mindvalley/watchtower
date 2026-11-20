@@ -7,6 +7,7 @@ const path = require('node:path');
 const { splitAreas, keyOf, CONFIG_AREA, REST_AREA } = require('../../agents/oracle/areas');
 const { fingerprint, placeFile } = require('../../agents/oracle/fingerprint');
 const { runOracle, mergeGroups } = require('../../agents/oracle/pipeline');
+const { renderReport } = require('../../agents/oracle/report');
 const { CostMeter } = require('../../agents/_shared/cost');
 
 const AGENT_DIR = path.join(__dirname, '../../agents/oracle');
@@ -87,6 +88,22 @@ test('merge unions places, keeps the strongest rating, and never drops a finding
   assert.equal(merged[0].harm, 'high');
   assert.deepEqual(merged[0].found_by, ['x#1', 'y#1']);
   assert.deepEqual(merged[1].found_by, ['z#1']);
+});
+
+// --- report --------------------------------------------------------------
+
+test('the findings table escapes backslashes and pipes', () => {
+  const finding = {
+    agreement: 'path C:\\tmp | port', places: ['a.ts'], likelihood: 'high', harm: 'low', fingerprint: 'abc',
+    unguarded: '', trigger: '', effect: '', fix: '', verification: { verdict: 'confirmed', note: '' },
+  };
+  const run = {
+    system: 'web', status: 'complete', commit: 'abc', provider: 'anthropic', model: 'm', prompt_version: '1',
+    cost: { usd: 0, calls: 0 }, started_at: '2026-11-20T00:00:00Z', not_audited: [], problems: [],
+    counts: { findings: 1, confirmed: 1, rejected: 0, current_bugs: 0, security_bugs: 0 },
+  };
+  const report = renderReport({ run, findings: [finding], rejected: [], bugs: [], areas: [{ name: 'src' }] });
+  assert.ok(report.includes('| 1 | path C:\\\\tmp \\| port | high | low | confirmed |'), report);
 });
 
 // --- pipeline end to end, with a scripted provider -------------------------
