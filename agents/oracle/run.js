@@ -13,6 +13,9 @@
  * The target is copied (a folder) or shallow-cloned (a repo, GH_TOKEN if private)
  * and only read. Nothing is published and no pull request is opened.
  *
+ * The latest earlier run with findings in the same runs folder is the previous
+ * run for step 5: its open findings are followed into this one (changes.json).
+ *
  * Exit codes: 0 complete · 1 failed (in part) · 2 stopped at the spending cap.
  * A run that hit the cap and also failed exits 1: failed outranks the cap.
  */
@@ -23,8 +26,9 @@ const { materialise } = require('../../scripts/benchmark/target-tree');
 const { agentSettings, loadDotEnv } = require('../_shared/config');
 const { createProvider } = require('../_shared/providers');
 const { CostMeter } = require('../_shared/cost');
-const { createRunDir, writeJson } = require('../_shared/runs');
+const { createRunDir, previousRun, writeJson } = require('../_shared/runs');
 const { runOracle } = require('./pipeline');
+const { loadPreviousOpen, changedFiles } = require('./compare');
 
 const EXIT = { complete: 0, failed: 1, incomplete: 2 };
 
@@ -56,6 +60,11 @@ async function main() {
   tree.notes.forEach((n) => process.stdout.write(`${n}\n`));
   const runDir = createRunDir('oracle', systemKey);
   process.stdout.write(`oracle: ${systemKey} -> ${runDir}\n`);
+  const previousDir = previousRun('oracle', systemKey, runDir, { needs: 'findings.json' });
+  const previous = previousDir ? loadPreviousOpen(previousDir) : null;
+  process.stdout.write(previous
+    ? `oracle: comparing with ${previous.run} (${previous.open.length} open findings)\n`
+    : 'oracle: no previous run — every finding is new\n');
 
   try {
     const run = await runOracle({
@@ -68,6 +77,8 @@ async function main() {
       runDir,
       meter,
       commit: headCommit(tree.historyDir),
+      previous,
+      changedSince: (fromCommit) => changedFiles(tree.historyDir, fromCommit),
       log: (line) => process.stdout.write(`  ${line}\n`),
     });
     process.stdout.write(`oracle: ${run.status} — ${run.counts.findings} findings, ${run.counts.current_bugs} bugs, $${run.cost.usd.toFixed(2)}\n`);

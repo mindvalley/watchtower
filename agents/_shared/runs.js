@@ -31,13 +31,14 @@ function createRunDir(agent, system, { date = new Date(), root = runsRoot() } = 
   return dir;
 }
 
-// The most recent earlier run of this agent on this system, or null.
-function previousRun(agent, system, currentDir, { root = runsRoot() } = {}) {
+// The most recent earlier run of this agent on this system, or null. `needs`
+// names a file the run must hold (a run that crashed early has only run.json).
+function previousRun(agent, system, currentDir, { root = runsRoot(), needs = 'run.json' } = {}) {
   const dir = path.join(root, agent, system);
   if (!fs.existsSync(dir)) return null;
   const earlier = fs.readdirSync(dir)
     .filter((name) => path.join(dir, name) !== currentDir)
-    .filter((name) => fs.existsSync(path.join(dir, name, 'run.json')))
+    .filter((name) => fs.existsSync(path.join(dir, name, 'run.json')) && fs.existsSync(path.join(dir, name, needs)))
     .sort();
   return earlier.length ? path.join(dir, earlier[earlier.length - 1]) : null;
 }

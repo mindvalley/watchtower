@@ -1,7 +1,7 @@
 # Oracle — design
 
-**Status.** Built: steps 1–4 and 7, local mode (`node agents/oracle/run.js --system <name>`). Next: step 5 and the
-remote workflow, then the dashboard summary, then step 6 and pull requests — see *Build order*.
+**Status.** Built: steps 1–5 and 7, local mode (`node agents/oracle/run.js --system <name>`). Next: the remote
+workflow, then the dashboard summary, then step 6 and pull requests — see *Build order*.
 
 ## What Oracle is
 
@@ -87,7 +87,7 @@ Plain code runs the steps; models are used only for the judgement inside each st
 | 2. Audit | One auditor per area, tools: read file, search, list. Free to follow an agreement anywhere | `raw/<area>.json` |
 | 3. Merge & rank | De-duplicate (one agreement found by several auditors), rank by likelihood × harm, fingerprint | `findings.json` |
 | 4. Verify | A separate pass re-reads both sides of each top finding; unconfirmed findings are dropped, not reported | verdicts in `findings.json` |
-| 5. Compare | Match fingerprints against the previous run: new, still open, fixed, guarded, broke | `changes.json` |
+| 5. Compare | Follow the previous run's open findings into this one: new, still open, fixed, guarded, broke (below) | `changes.json` |
 | 6. Remedy | For the top findings (up to the PR cap): a guard as a patch, with the one-sided change it catches | `patches/<fp>.patch`, `.md` |
 | 7. Report | Readable report; current bugs separate, security first | `report.md`, `bugs.json`, `run.json` |
 | 8. Output | Optional PRs; optional summary to the dashboard | — |
@@ -98,6 +98,28 @@ Principles carried over from the scanner:
 - **Never falsely clean.** An auditor that fails fails the run; it does not become "no findings for that area".
 - **Allowances.** A finding judged acceptable is allowed in `watchtower.allowances.json` with a reason, like scanner
   findings: kept in the report, marked, never re-raised as a PR.
+
+## Step 5: following findings across runs
+
+Two facts from the first runs shape it. Findings are rewritten from scratch each run, so neither text nor the files
+named survive (fingerprints by file set matched 3 of 82–92 across two runs of one commit). And one run sees about two
+thirds of what is there, so a finding missing from a run has usually not been fixed — the run did not see it.
+
+1. **Match by meaning.** One model call pairs the previous run's open findings with this run's (`prompts/compare.md`,
+   no tools). A paired finding keeps its **id**: its fingerprint in the run that first saw it, made unique, never
+   changed after. Several earlier findings paired to one current finding are duplicates: the oldest id is kept, the
+   others are `merged`. One earlier finding paired to several current ones keeps its id on the first; the rest are
+   `split`, with new ids.
+2. **Unmatched earlier findings: look at the code before closing.** If none of its files changed since the previous
+   commit, it is carried forward as still open, with no model call. If one did, a re-check reads the places now
+   (`prompts/recheck.md`, tree tools) and says `still_open`, `fixed`, `guarded`, `broke` or `unsure`.
+3. **Never falsely fixed.** Only a re-check closes a finding. If what changed cannot be told, every unmatched finding
+   is re-checked. If matching or a re-check fails (or the spending cap stops it), the findings concerned stay open and
+   the run says so.
+
+The open backlog of a run is its findings plus `changes.json` → `carried`, so weekly runs build up coverage instead
+of losing what each run missed. The previous run is the latest earlier run with a `findings.json`. In a shallow clone
+the previous commit is fetched one deep to diff; a local folder target is only read, never fetched into.
 
 ## Runs
 
@@ -128,7 +150,7 @@ pull requests only for systems that opted in), OIDC for the dashboard. Storage i
 - Off by default; on per agent or per system. One PR per finding, at most `max_pull_requests` per run, highest
   ranked first. Never to the default branch directly.
 - Each PR: the guard, why the agreement exists (both places), the one-sided change it catches, and the finding's
-  fingerprint as a label so the same finding is never raised twice. An open or closed PR for a fingerprint blocks a new
+  finding's id as a label so the same finding is never raised twice. An open or closed PR for an id blocks a new
   one; a closed-unmerged PR is treated as "declined" and needs an allowance or a manual re-open to come back.
 - **Security fixes on public repositories** go through a private security advisory (temporary private fork), not a
   public PR, so the vulnerability is not disclosed before the fix ships. On private repositories they are normal PRs.
@@ -151,8 +173,10 @@ pull requests only for systems that opted in), OIDC for the dashboard. Storage i
 
 ## Open items
 
-- **Fingerprints.** Findings are written by a model, so wording varies between runs; the fingerprint must rest on the
-  places (files, symbols) and the kind of agreement, not the text. Needs testing across two runs of the same commit.
-- **Run-to-run variation.** Not yet measured: how much two runs on the same commit agree.
-- **Cost.** Not yet measured per run. First runs record an estimate at Anthropic list prices.
 - **Team consent** before PRs are switched on for any team's repository.
+- **Matching quality.** Step 5's pairing is checked against a hand-reviewed reference (two runs of one commit, 48
+  pairs) before the first scheduled runs; re-check verdicts against a later commit.
+
+Settled by the first runs (Program Intelligence, 2026-11-17): run-to-run variation — one run sees about two thirds of
+what two runs see together, top 10 shared 8 of 10; cost — about $20 (Sonnet) / $28 (Opus) for a ~3,000-file monorepo;
+fingerprints are not stable across runs, hence step 5's meaning-matching.

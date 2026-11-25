@@ -108,15 +108,32 @@ test('the findings table escapes backslashes and pipes', () => {
 
 // --- pipeline end to end, with a scripted provider -------------------------
 
-function scriptedProvider({ failArea, flakyArea, mergeApart, reject, tooLongArea } = {}) {
+function scriptedProvider({ failArea, flakyArea, mergeApart, reject, tooLongArea, failCompare, recheck = {} } = {}) {
   let flaked = false;
   const provider = {
     tooLongAttempts: 0,
+    calls: { compare: 0, recheck: 0 },
     conversation({ system }) {
-      const kind = /Group findings/.test(system) ? 'merge' : /Check findings/.test(system) ? 'verify' : 'audit';
+      const kind = /Group findings/.test(system) ? 'merge' : /Check findings/.test(system) ? 'verify'
+        : /Match findings/.test(system) ? 'compare' : /Re-check findings/.test(system) ? 'recheck' : 'audit';
       return {
         async send(content) {
           const usage = { input: 1000, output: 200 };
+          if (kind === 'compare') {
+            provider.calls.compare += 1;
+            if (failCompare) return { toolCalls: [], text: '', stop: 'refusal', usage, model: 'm' };
+            // Same agreement text = same agreement.
+            const { previous, current } = JSON.parse(content);
+            const matches = current.map((c) => ({ current: c.id, previous: previous.filter((p) => p.agreement === c.agreement).map((p) => p.id) }))
+              .filter((m) => m.previous.length);
+            return { stop: 'tool', usage, model: 'm', text: '', toolCalls: [{ id: 'c', name: 'submit_matches', input: { matches } }] };
+          }
+          if (kind === 'recheck') {
+            provider.calls.recheck += 1;
+            const items = JSON.parse(content);
+            const statuses = items.map((i) => ({ id: i.id, status: recheck[i.agreement] || 'still_open', note: 'read it' }));
+            return { stop: 'tool', usage, model: 'm', text: '', toolCalls: [{ id: 'r', name: 'submit_statuses', input: { statuses } }] };
+          }
           if (kind === 'audit') {
             const area = String(content).match(/starting area: (.*)\n/)?.[1] || '';
             if (failArea && area === failArea) return { toolCalls: [], text: '', stop: 'refusal', usage, model: 'm' };
@@ -244,4 +261,89 @@ test('an area is not retried after the model says the conversation is too long',
     provider, treeDir: fixtureTree(), runDir, meter: new CostMeter({}),
   });
   assert.equal(provider.tooLongAttempts, 1);
+});
+
+// --- step 5: compare with the previous run --------------------------------
+
+const PORT = 'port copied (config and operations)';
+const earlier = (id, agreement, places) => ({
+  id, fingerprint: id, agreement, places, likelihood: 'high', harm: 'medium', unguarded: 'u', trigger: 't', effect: 'e', fix: 'f',
+  verification: { verdict: 'confirmed', note: '' }, first_seen: { run: '2026-11-10-0300', commit: 'aaa' },
+});
+const PREVIOUS = {
+  dir: '/runs/oracle/web/2026-11-18-0300', run: '2026-11-18-0300', commit: 'aaa',
+  open: [
+    earlier('keep1', PORT, ['package.json', 'src/a.ts']),
+    earlier('carry1', 'docs table copied', ['docs/env.md']),
+    earlier('gone1', 'stale env name', ['src/a.ts:2']),
+  ],
+};
+const readRun = (runDir, f) => JSON.parse(fs.readFileSync(path.join(runDir, f), 'utf8'));
+
+async function runWithPrevious(providerOpts, { previous = PREVIOUS, changed = new Set(['src/a.ts']) } = {}) {
+  const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-oracle-run-'));
+  const provider = scriptedProvider(providerOpts);
+  const run = await runOracle({
+    systemKey: 'web', settings: SETTINGS, defaults: DEFAULTS, agentDir: AGENT_DIR, provider, treeDir: fixtureTree(),
+    runDir, meter: new CostMeter({}), commit: 'bbb', previous, changedSince: () => changed,
+  });
+  return { run, runDir, provider };
+}
+
+test('a first run has nothing to compare: every finding is new, with its fingerprint as its id', async () => {
+  const { run, runDir, provider } = await runWithPrevious({}, { previous: null });
+  const changes = readRun(runDir, 'changes.json');
+  assert.equal(changes.previous, null);
+  const [f] = readRun(runDir, 'findings.json').findings;
+  assert.equal(f.id, f.fingerprint);
+  assert.equal(f.change, 'new');
+  assert.equal(run.changes.new, 1);
+  assert.equal(provider.calls.compare, 0);
+  assert.match(fs.readFileSync(path.join(runDir, 'report.md'), 'utf8'), /First run/);
+});
+
+test('against the previous run: found again keeps its id, unchanged is carried, changed is re-checked', async () => {
+  const { run, runDir, provider } = await runWithPrevious({ recheck: { 'stale env name': 'fixed' } });
+  const [f] = readRun(runDir, 'findings.json').findings;
+  assert.equal(f.id, 'keep1');
+  assert.equal(f.change, 'still_open');
+  const changes = readRun(runDir, 'changes.json');
+  assert.equal(changes.previous.run, '2026-11-18-0300');
+  assert.deepEqual(changes.carried.map((c) => c.id), ['carry1'], 'unchanged files: carried, still open');
+  const status = Object.fromEntries(changes.earlier.map((e) => [e.id, e.status]));
+  assert.deepEqual(status, { keep1: 'still_open', carry1: 'still_open', gone1: 'fixed' });
+  assert.equal(provider.calls.recheck, 1, 'only the finding whose files changed is re-checked');
+  assert.deepEqual(run.changes, { new: 0, still_open: 2, merged: 0, fixed: 1, guarded: 0, broke: 0, open: 2 });
+  const report = fs.readFileSync(path.join(runDir, 'report.md'), 'utf8');
+  assert.match(report, /## Since the previous run/);
+  assert.match(report, /Fixed.*stale env name/s);
+});
+
+test('a re-check that finds the agreement broken closes it as broke and says so first', async () => {
+  const { run, runDir } = await runWithPrevious({ recheck: { 'stale env name': 'broke' } });
+  assert.equal(run.changes.broke, 1);
+  const report = fs.readFileSync(path.join(runDir, 'report.md'), 'utf8');
+  assert.ok(report.indexOf('Broke') < report.indexOf('Fixed') || !report.includes('Fixed'), 'broke is listed before fixed');
+});
+
+test('an unsure re-check keeps the finding open', async () => {
+  const { runDir } = await runWithPrevious({ recheck: { 'stale env name': 'unsure' } });
+  const changes = readRun(runDir, 'changes.json');
+  assert.deepEqual(changes.carried.map((c) => c.id).sort(), ['carry1', 'gone1']);
+});
+
+test('if the comparison fails, every earlier finding stays open and nothing is marked fixed', async () => {
+  const { run, runDir } = await runWithPrevious({ failCompare: true, recheck: { 'stale env name': 'fixed' } });
+  assert.equal(run.status, 'failed');
+  assert.ok(run.problems.some((p) => p.startsWith('compare')));
+  const changes = readRun(runDir, 'changes.json');
+  assert.equal(changes.compared, false);
+  assert.deepEqual(changes.carried.map((c) => c.id).sort(), ['carry1', 'gone1', 'keep1']);
+  assert.equal(run.changes.fixed, 0);
+});
+
+test('when what changed is unknown, unmatched findings are re-checked, not assumed unchanged', async () => {
+  const { provider, runDir } = await runWithPrevious({}, { changed: null });
+  assert.equal(provider.calls.recheck, 1);
+  assert.deepEqual(readRun(runDir, 'changes.json').carried.map((c) => c.id).sort(), ['carry1', 'gone1']);
 });

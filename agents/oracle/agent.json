@@ -2,11 +2,13 @@
   "name": "oracle",
   "looks_for": "places that will break when someone changes one side of an unwritten agreement",
   "changes": "proposes a guard: a test that fails on a one-sided change, or a single source of truth",
-  "prompt_version": "2026-11-17",
+  "prompt_version": "2026-11-25",
   "prompts": {
     "audit": "prompts/audit.md",
     "merge": "prompts/merge.md",
-    "verify": "prompts/verify.md"
+    "verify": "prompts/verify.md",
+    "compare": "prompts/compare.md",
+    "recheck": "prompts/recheck.md"
   },
   "settings": {
     "provider": "anthropic",
