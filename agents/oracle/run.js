@@ -78,7 +78,8 @@ async function main() {
       meter,
       commit: headCommit(tree.historyDir),
       previous,
-      changedSince: (fromCommit) => changedFiles(tree.historyDir, fromCommit),
+      // Fetch the earlier commit only into Oracle's own clone, never a local folder.
+      changedSince: (fromCommit) => changedFiles(tree.historyDir, fromCommit, { fetch: tree.kind === 'repo' }),
       log: (line) => process.stdout.write(`  ${line}\n`),
     });
     process.stdout.write(`oracle: ${run.status} — ${run.counts.findings} findings, ${run.counts.current_bugs} bugs, $${run.cost.usd.toFixed(2)}\n`);

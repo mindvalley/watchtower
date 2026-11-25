@@ -17,7 +17,8 @@
  *   - Nothing is closed (fixed, guarded, broke) without a re-check saying so.
  *
  * Ids: a finding's id is its fingerprint in the run that first saw it, made
- * unique. It never changes after that, so it can label pull requests later.
+ * unique against every id ever handed out (changes.json → issued_ids), closed
+ * ones included. It never changes after that, so it can label pull requests.
  */
 
 const fs = require('node:fs');
@@ -47,14 +48,16 @@ function loadPreviousOpen(runDir) {
   const stamp = path.basename(runDir);
   const { findings = [] } = readJson(path.join(runDir, 'findings.json'));
   const changesFile = path.join(runDir, 'changes.json');
-  const carried = fs.existsSync(changesFile) ? (readJson(changesFile).carried || []) : [];
-  const taken = new Set();
+  const changes = fs.existsSync(changesFile) ? readJson(changesFile) : {};
+  const carried = changes.carried || [];
+  const issued = new Set(changes.issued_ids || []);
   const open = [...findings, ...carried].map((f) => ({
     ...f,
-    id: f.id || uniqueId(f.fingerprint, taken),
+    id: f.id || uniqueId(f.fingerprint, issued),
     first_seen: f.first_seen || { run: stamp, commit: run.commit || null },
   }));
-  return { dir: runDir, run: stamp, commit: run.commit || null, open };
+  open.forEach((f) => issued.add(f.id));
+  return { dir: runDir, run: stamp, commit: run.commit || null, open, issued };
 }
 
 /*
@@ -66,7 +69,7 @@ function loadPreviousOpen(runDir) {
  * found again (still_open, or merged into another id), and the earlier findings
  * that were not.
  */
-function applyMatches({ previousOpen, current, matches, run, commit }) {
+function applyMatches({ previousOpen, current, matches, run, commit, issued = new Set() }) {
   const prevAt = (ref) => previousOpen[Number(String(ref).replace(/^P/, '')) - 1];
   const curAt = (ref) => current[Number(String(ref).replace(/^C/, '')) - 1];
 
@@ -78,7 +81,7 @@ function applyMatches({ previousOpen, current, matches, run, commit }) {
     if (prevs.length) claims.set(cur, [...new Set([...(claims.get(cur) || []), ...prevs])]);
   }
 
-  const taken = new Set(previousOpen.map((f) => f.id));
+  const taken = new Set([...issued, ...previousOpen.map((f) => f.id)]);
   const inherited = new Map(); // earlier id -> current finding that kept it
   const outcomes = new Map();
   const refound = new Set();
@@ -115,12 +118,27 @@ function applyMatches({ previousOpen, current, matches, run, commit }) {
  * changed, re-checked if one did. `changed` null means unknown — then every
  * one is re-checked rather than assumed unchanged.
  */
+// A place as a path to compare with changed files: quotes and a line anchor
+// dropped, a trailing slash kept so a folder is matched by what is inside it.
+const placePath = (file) => file.replace(/^[`'"]+|[`'"]+$/g, '').replace(/#.*$/, '');
+
+function hitsOf(places, changed) {
+  const hits = new Set();
+  for (const raw of placeFiles(places)) {
+    const p = placePath(raw);
+    if (!p) continue;
+    if (changed.has(p)) hits.add(p);
+    if (p.endsWith('/')) for (const c of changed) if (c.startsWith(p)) hits.add(c);
+  }
+  return [...hits].sort();
+}
+
 function splitUnmatched(unmatched, changed) {
   const carried = [];
   const recheck = [];
   for (const f of unmatched) {
     if (!changed) { recheck.push({ ...f, changed_files: null }); continue; }
-    const hit = placeFiles(f.places).filter((file) => changed.has(file));
+    const hit = hitsOf(f.places, changed);
     if (hit.length) recheck.push({ ...f, changed_files: hit });
     else carried.push(f);
   }
@@ -128,23 +146,26 @@ function splitUnmatched(unmatched, changed) {
 }
 
 /*
- * Files changed between `fromCommit` and HEAD in `dir`, or null when that
- * cannot be told. Oracle's own shallow clone does not hold the earlier commit,
- * so it is fetched first (one commit deep). A full repository is a local folder
- * target — the user's own — and is only read, never fetched into.
+ * Files that differ between `fromCommit` and the tree as it is on disk (so a
+ * local folder's uncommitted edits count), relative to `dir` like the places
+ * findings name; null when that cannot be told.
+ *
+ * `fetch: true` only for Oracle's own shallow clone, which does not hold the
+ * earlier commit: it is fetched one deep. A local folder target is the user's
+ * own and is only read, never fetched into — shallow or not.
  */
-function changedFiles(dir, fromCommit) {
+function changedFiles(dir, fromCommit, { fetch = false } = {}) {
   if (!dir || !fromCommit) return null;
   const git = (...args) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
   try {
     try {
       git('cat-file', '-e', `${fromCommit}^{commit}`);
     } catch {
-      if (git('rev-parse', '--is-shallow-repository').trim() !== 'true') return null;
+      if (!fetch) return null;
       git('fetch', '-q', '--depth', '1', 'origin', fromCommit);
     }
-    const out = git('diff', '--name-only', '--no-renames', fromCommit, 'HEAD');
-    return new Set(out.split('\n').filter(Boolean));
+    const out = git('diff', '--name-only', '-z', '--relative', '--no-renames', fromCommit);
+    return new Set(out.split('\0').filter(Boolean));
   } catch {
     return null;
   }

@@ -146,7 +146,7 @@ async function compareWithPrevious({
   }
 
   const { outcomes, unmatched } = applyMatches({
-    previousOpen: open, current, matches: compared ? matches : [], run: runStamp, commit,
+    previousOpen: open, issued: previous ? previous.issued : new Set(), current, matches: compared ? matches : [], run: runStamp, commit,
   });
   const earlier = [...outcomes];
   const carried = [];
@@ -155,10 +155,15 @@ async function compareWithPrevious({
     earlier.push({ id: f.id, status: 'still_open', refound: false, note });
   };
 
+  // Every id ever handed out, closed ones included, so none is reused.
+  const issuedIds = () => [...new Set([...(previous ? previous.issued : []), ...open.map((f) => f.id), ...current.map((f) => f.id)])].sort();
+
   if (!compared) {
     unmatched.forEach((f) => keepOpen(f, 'not compared this run'));
     const counts = changeCounts(current, earlier, carried);
-    return { ...base, compared, current: current.map((f) => ({ id: f.id, change: f.change })), earlier, carried, counts };
+    return {
+      ...base, compared, current: current.map((f) => ({ id: f.id, change: f.change })), earlier, carried, issued_ids: issuedIds(), counts,
+    };
   }
 
   const split = splitUnmatched(unmatched, previous ? changedSince(previous.commit) : null);
@@ -200,6 +205,7 @@ async function compareWithPrevious({
     current: current.map((f) => ({ id: f.id, change: f.change, ...(f.split_from ? { split_from: f.split_from } : {}) })),
     earlier,
     carried,
+    issued_ids: issuedIds(),
     counts,
   };
 }

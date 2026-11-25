@@ -277,6 +277,7 @@ const PREVIOUS = {
     earlier('carry1', 'docs table copied', ['docs/env.md']),
     earlier('gone1', 'stale env name', ['src/a.ts:2']),
   ],
+  issued: new Set(['keep1', 'carry1', 'gone1']),
 };
 const readRun = (runDir, f) => JSON.parse(fs.readFileSync(path.join(runDir, f), 'utf8'));
 
@@ -314,6 +315,7 @@ test('against the previous run: found again keeps its id, unchanged is carried, 
   assert.deepEqual(status, { keep1: 'still_open', carry1: 'still_open', gone1: 'fixed' });
   assert.equal(provider.calls.recheck, 1, 'only the finding whose files changed is re-checked');
   assert.deepEqual(run.changes, { new: 0, still_open: 2, merged: 0, fixed: 1, guarded: 0, broke: 0, open: 2 });
+  assert.deepEqual([...changes.issued_ids].sort(), ['carry1', 'gone1', 'keep1'], 'closed ids stay reserved');
   const report = fs.readFileSync(path.join(runDir, 'report.md'), 'utf8');
   assert.match(report, /## Since the previous run/);
   assert.match(report, /Fixed.*stale env name/s);

@@ -106,8 +106,8 @@ named survive (fingerprints by file set matched 3 of 82–92 across two runs of 
 thirds of what is there, so a finding missing from a run has usually not been fixed — the run did not see it.
 
 1. **Match by meaning.** One model call pairs the previous run's open findings with this run's (`prompts/compare.md`,
-   no tools). A paired finding keeps its **id**: its fingerprint in the run that first saw it, made unique, never
-   changed after. Several earlier findings paired to one current finding are duplicates: the oldest id is kept, the
+   no tools). A paired finding keeps its **id**: its fingerprint in the run that first saw it, made unique against
+   every id ever handed out (`changes.json` → `issued_ids`, closed ones included), never changed after. Several earlier findings paired to one current finding are duplicates: the oldest id is kept, the
    others are `merged`. One earlier finding paired to several current ones keeps its id on the first; the rest are
    `split`, with new ids.
 2. **Unmatched earlier findings: look at the code before closing.** If none of its files changed since the previous
@@ -118,8 +118,10 @@ thirds of what is there, so a finding missing from a run has usually not been fi
    the run says so.
 
 The open backlog of a run is its findings plus `changes.json` → `carried`, so weekly runs build up coverage instead
-of losing what each run missed. The previous run is the latest earlier run with a `findings.json`. In a shallow clone
-the previous commit is fetched one deep to diff; a local folder target is only read, never fetched into.
+of losing what each run missed. The previous run is the latest earlier run with a `findings.json`. Changed files are
+the difference between the previous commit and the tree on disk (a local folder's uncommitted edits count), relative
+to the target like the places findings name. Oracle's own shallow clone fetches the previous commit one deep; a local
+folder target is only read, never fetched into.
 
 ## Runs
 
@@ -177,6 +179,6 @@ pull requests only for systems that opted in), OIDC for the dashboard. Storage i
 - **Matching quality.** Step 5's pairing is checked against a hand-reviewed reference (two runs of one commit, 48
   pairs) before the first scheduled runs; re-check verdicts against a later commit.
 
-Settled by the first runs (Program Intelligence, 2026-11-17): run-to-run variation — one run sees about two thirds of
+Settled by the first runs (a ~3,000-file TypeScript monorepo, 2026-11-17): run-to-run variation — one run sees about two thirds of
 what two runs see together, top 10 shared 8 of 10; cost — about $20 (Sonnet) / $28 (Opus) for a ~3,000-file monorepo;
 fingerprints are not stable across runs, hence step 5's meaning-matching.

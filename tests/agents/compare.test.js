@@ -150,7 +150,7 @@ test('changed files are listed between the previous commit and now, even in a sh
   const { origin, first } = repoWithTwoCommits();
   const shallow = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'wt-cmp-clone-')), 'c');
   execFileSync('git', ['clone', '-q', '--depth', '1', `file://${origin}`, shallow]);
-  assert.deepEqual([...changedFiles(shallow, first)], ['b.ts']);
+  assert.deepEqual([...changedFiles(shallow, first, { fetch: true })], ['b.ts']);
 });
 
 test('changed files are unknown, not empty, when the previous commit cannot be found', () => {
@@ -171,4 +171,71 @@ test('a full repository (a local folder target) is never fetched into: it is onl
   const before = git(full, 'count-objects', '-v');
   assert.equal(changedFiles(full, onlyRemote), null);
   assert.equal(git(full, 'count-objects', '-v'), before);
+});
+
+test('a shallow checkout that is the user\'s own folder is not fetched into either: fetching is opt-in', () => {
+  const { origin, first } = repoWithTwoCommits();
+  const shallow = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'wt-cmp-clone-')), 'c');
+  execFileSync('git', ['clone', '-q', '--depth', '1', `file://${origin}`, shallow]);
+  const before = fs.readFileSync(path.join(shallow, '.git/shallow'), 'utf8');
+  assert.equal(changedFiles(shallow, first), null);
+  assert.equal(fs.readFileSync(path.join(shallow, '.git/shallow'), 'utf8'), before);
+});
+
+test('in a target that is a subfolder of a repository, changed files are relative to the target, like places', () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-cmp-sub-'));
+  git(repo, 'init', '-q', '-b', 'main');
+  git(repo, 'config', 'user.email', 't@example.com');
+  git(repo, 'config', 'user.name', 't');
+  fs.mkdirSync(path.join(repo, 'sub'));
+  fs.writeFileSync(path.join(repo, 'sub/a.js'), '1');
+  fs.writeFileSync(path.join(repo, 'other.js'), '1');
+  git(repo, 'add', '.');
+  git(repo, 'commit', '-q', '-m', 'one');
+  const first = git(repo, 'rev-parse', 'HEAD');
+  fs.writeFileSync(path.join(repo, 'sub/a.js'), '2');
+  fs.writeFileSync(path.join(repo, 'other.js'), '2');
+  git(repo, 'commit', '-q', '-am', 'two');
+  assert.deepEqual([...changedFiles(path.join(repo, 'sub'), first)], ['a.js']);
+});
+
+test('uncommitted edits count as changed: a local folder is audited as it is on disk', () => {
+  const { origin } = repoWithTwoCommits();
+  const head = git(origin, 'rev-parse', 'HEAD');
+  fs.writeFileSync(path.join(origin, 'a.ts'), 'edited, not committed');
+  assert.deepEqual([...changedFiles(origin, head)], ['a.ts']);
+});
+
+test('unusual file names come back as they are, not quoted', () => {
+  const { origin } = repoWithTwoCommits();
+  const head = git(origin, 'rev-parse', 'HEAD');
+  fs.writeFileSync(path.join(origin, 'café "x".ts'), '1');
+  git(origin, 'add', '.');
+  git(origin, 'commit', '-q', '-m', 'odd name');
+  assert.deepEqual([...changedFiles(origin, head)], ['café "x".ts']);
+});
+
+test('places naming a folder, a line anchor or a quoted path still match the files that changed', () => {
+  const prev = [
+    finding('p1', ['src/config/'], { id: 'dir' }),
+    finding('p2', ['src/a.ts#L12'], { id: 'anchor' }),
+    finding('p3', ['`src/b.ts`'], { id: 'ticks' }),
+    finding('p4', ['src/configuration.ts'], { id: 'prefix-only' }),
+  ];
+  const { carried, recheck } = splitUnmatched(prev, new Set(['src/config/env.ts', 'src/a.ts', 'src/b.ts']));
+  assert.deepEqual(recheck.map((f) => f.id), ['dir', 'anchor', 'ticks']);
+  assert.deepEqual(carried.map((f) => f.id), ['prefix-only']);
+});
+
+test('ids ever handed out are never handed out again, even after the finding closed', () => {
+  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'wt-cmp-')), '2026-11-18-0300');
+  writeRun(dir, {
+    findings: [finding('f1', ['a.ts'], { id: 'f1', first_seen: { run: 'x', commit: 'aaa' } })],
+    changes: { carried: [], issued_ids: ['f1', 'gone'] },
+  });
+  const prev = loadPreviousOpen(dir);
+  assert.deepEqual([...prev.issued].sort(), ['f1', 'gone']);
+  const current = [finding('gone', ['z.ts'])];
+  applyMatches({ previousOpen: prev.open, issued: prev.issued, current, matches: [], ...RUN });
+  assert.notEqual(current[0].id, 'gone');
 });
