@@ -18,7 +18,8 @@ function findingBlock(f, n) {
   return [
     `### ${n}. ${f.agreement}`,
     '',
-    `**Likelihood** ${f.likelihood} · **Harm** ${f.harm} · **Verified** ${v.verdict}${v.note ? ` — ${v.note}` : ''} · \`${f.fingerprint}\``,
+    `**Likelihood** ${f.likelihood} · **Harm** ${f.harm} · **Verified** ${v.verdict}${v.note ? ` — ${v.note}` : ''} · \`${f.id || f.fingerprint}\``
+      + `${f.change === 'new' || f.change === 'split' ? ' · **new**' : f.first_seen ? ` · open since ${f.first_seen.run}` : ''}`,
     '',
     '**Places**',
     ...f.places.map((p) => `- \`${p}\``),
@@ -34,7 +35,42 @@ function findingBlock(f, n) {
   ].join('\n');
 }
 
-function renderReport({ run, findings, rejected, bugs, areas }) {
+// Closed findings, worst news first: an agreement that broke is a bug now.
+const CLOSED_HEADINGS = [
+  ['broke', 'Broke', 'One side changed and the other did not — this is a bug now.'],
+  ['fixed', 'Fixed', 'The agreement no longer exists.'],
+  ['guarded', 'Guarded', 'Something now fails if only one side changes.'],
+];
+
+function changesSection(changes) {
+  if (!changes) return [];
+  const lines = ['## Since the previous run', ''];
+  if (!changes.previous) return [...lines, 'First run — nothing to compare with. Every finding is new.', ''];
+  const c = changes.counts;
+  lines.push(`Compared with \`${changes.previous.run}\` (commit \`${changes.previous.commit || 'unknown'}\`).`, '');
+  if (!changes.compared) {
+    lines.push('**Not compared** — see "Run problems". Every earlier finding is kept open; none is marked fixed.', '');
+  }
+  lines.push(`**${c.new} new**, **${c.still_open} still open** (${changes.carried.length} of them not found this run but `
+    + `carried forward), **${c.broke} broke**, **${c.fixed} fixed**, **${c.guarded} guarded**`
+    + `${c.merged ? `, ${c.merged} merged as duplicates` : ''}. **${c.open} open in total.**`, '');
+  for (const [status, heading, meaning] of CLOSED_HEADINGS) {
+    const closed = changes.earlier.filter((e) => e.status === status);
+    if (!closed.length) continue;
+    lines.push(`### ${heading}`, '', meaning, '');
+    for (const e of closed) lines.push(`- ${e.agreement} — ${e.note} \`${e.id}\``);
+    lines.push('');
+  }
+  if (changes.carried.length) {
+    lines.push('### Carried forward', '', 'Open last time and not reported this time. Each run misses some, so these stay open '
+      + 'until a re-check of changed code closes them.', '');
+    for (const f of changes.carried) lines.push(`- ${f.agreement} \`${f.id}\``);
+    lines.push('');
+  }
+  return lines;
+}
+
+function renderReport({ run, findings, rejected, bugs, areas, changes = null }) {
   const c = run.counts;
   const lines = [
     `# Oracle — ${run.system}`,
@@ -56,6 +92,8 @@ function renderReport({ run, findings, rejected, bugs, areas }) {
   } else {
     lines.push('## Hidden agreements', '', run.status === 'complete' ? 'None found.' : 'None reported before the run stopped.', '');
   }
+
+  lines.push(...changesSection(changes));
 
   lines.push('## Current bugs', '');
   if (bugs.length) {

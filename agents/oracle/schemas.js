@@ -79,4 +79,49 @@ const SUBMIT_VERDICTS = {
   },
 };
 
-module.exports = { SUBMIT_FINDINGS, SUBMIT_GROUPS, SUBMIT_VERDICTS };
+const SUBMIT_MATCHES = {
+  name: 'submit_matches',
+  description: 'Hand in the matches. Call once, at the end.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      matches: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            current: { type: 'string' },
+            previous: { type: 'array', items: { type: 'string' }, minItems: 1 },
+          },
+          required: ['current', 'previous'],
+        },
+      },
+    },
+    required: ['matches'],
+  },
+};
+
+const SUBMIT_STATUSES = {
+  name: 'submit_statuses',
+  description: 'Hand in a status for every finding. Call once, at the end.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      statuses: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            status: { type: 'string', enum: ['still_open', 'fixed', 'guarded', 'broke', 'unsure'] },
+            note: { type: 'string' },
+          },
+          required: ['id', 'status', 'note'],
+        },
+      },
+    },
+    required: ['statuses'],
+  },
+};
+
+module.exports = { SUBMIT_FINDINGS, SUBMIT_GROUPS, SUBMIT_VERDICTS, SUBMIT_MATCHES, SUBMIT_STATUSES };

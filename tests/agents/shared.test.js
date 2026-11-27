@@ -319,6 +319,19 @@ test('run folders are dated, never overwritten, and the previous run is found', 
   assert.equal(previousRun('oracle', 'none', b, { root }), null);
 });
 
+test('the previous run can be required to hold a file, so a run that crashed early is skipped', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-runs-'));
+  const at = (h) => createRunDir('oracle', 'web', { date: new Date(Date.UTC(2026, 10, 16, h)), root });
+  const good = at(1);
+  writeJson(good, 'run.json', {});
+  writeJson(good, 'findings.json', { findings: [] });
+  const crashed = at(2);
+  writeJson(crashed, 'run.json', { status: 'failed' });
+  const current = at(3);
+  assert.equal(previousRun('oracle', 'web', current, { root }), crashed);
+  assert.equal(previousRun('oracle', 'web', current, { root, needs: 'findings.json' }), good);
+});
+
 // --- anthropic adapter ---------------------------------------------------
 
 test('anthropic adapter sends cached, streamed requests (fallbacks when asked) and maps the reply', async () => {
