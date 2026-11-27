@@ -275,6 +275,7 @@
 <script src="/js/loading.js"></script>
 <script src="/js/criteria.js"></script>
 <script src="/js/composite-trend.js"></script>
+<script src="/js/agent-impact.js"></script>
 </head>
 <body>
 <div class="page">
@@ -352,6 +353,9 @@ function dot(colour) {
 // the allowances list, where allowing nothing is the ordinary state. The file
 // is private side, because it names who we measure.
 let NAMES = { orgs: {}, systems: {} };
+// Every agent run (Oracle's, so far), from /data/agent-runs.json. Empty if the
+// feed is missing: the board never depends on the agents.
+let AGENT_RUNS = [];
 
 function titleise(key) {
   return String(key).split(/[-_]/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
@@ -643,6 +647,17 @@ const URL_PREFIX = { composite: 'c', issues: 'i' };
 const rangeBy = { composite: '30d', issues: '30d' };
 const hiddenBy = { composite: new Set(), issues: new Set() };
 
+// One organisation's Oracle summary, under its trends. Nothing when none of its
+// systems has an Oracle run yet.
+function agentSection(keys) {
+  const summary = AgentImpact.fleetSummary(AGENT_RUNS, keys);
+  if (!summary) return '';
+  return `<section class="wt-trend">
+      <div class="wt-trend-head"><div class="section-label">Oracle — hidden agreements</div></div>
+      ${AgentImpact.fleetSummaryHtml(summary, esc)}
+    </section>`;
+}
+
 function trendSection(org, keys, benchmark, history) {
   const floor = history.since || '2026-08-27';
   const latestIso = latestReading(history) || benchmark.last_updated;
@@ -736,6 +751,7 @@ function render(benchmark, history) {
         </div>
         ${bandLegend()}
         ${trendSection(org, keys, benchmark, history)}
+        ${agentSection(keys)}
       </div>`;
   }).join('');
 
@@ -886,16 +902,18 @@ async function optionalJson(url) {
 async function init() {
   const regions = [document.getElementById('org-panels')];
   try {
-    const [benchmark, history, names] = await Loading.withLoading(
+    const [benchmark, history, names, agentRuns] = await Loading.withLoading(
       regions,
       'Loading scores…',
       () => Promise.all([
         Loading.getJson('/data/benchmark.json'),
         Loading.getJson('/data/history.json'),
         optionalJson('/data/display-names.json'),
+        optionalJson('/data/agent-runs.json'),
       ]),
     );
     NAMES = { orgs: (names && names.orgs) || {}, systems: (names && names.systems) || {} };
+    AGENT_RUNS = (agentRuns && agentRuns.runs) || [];
     readTrendState();
     render(benchmark, history);
     wireCardClicks();

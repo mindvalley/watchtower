@@ -399,3 +399,39 @@ test('vertex needs no key, only the project variable, and never asks for fallbac
   assert.equal(sent[0].model, 'claude-opus-5-5');
   assert.deepEqual(sent[0].cache_control, { type: 'ephemeral' });
 });
+
+// --- submitted answers are checked against the submit tool's schema ----------
+
+const { SUBMIT_FINDINGS } = require('../../agents/oracle/schemas');
+const { checkInput } = require('../../agents/_shared/loop');
+const VALID = { findings: [{ places: ['a.ts'], agreement: 'x', unguarded: 'u', trigger: 't', effect: 'e', fix: 'f', likelihood: 'high', harm: 'low' }], current_bugs: [] };
+
+test('a submission is checked against the schema, down to the items', () => {
+  const schema = SUBMIT_FINDINGS.input_schema;
+  assert.equal(checkInput(schema, VALID), null);
+  assert.match(checkInput(schema, { ...VALID, findings: JSON.stringify(VALID.findings) }), /findings must be an array/);
+  assert.match(checkInput(schema, { findings: [] }), /current_bugs is required/);
+  assert.match(checkInput(schema, { ...VALID, findings: [{ ...VALID.findings[0], likelihood: 'huge' }] }), /findings\[0\]\.likelihood must be one of/);
+  assert.match(checkInput(schema, { ...VALID, findings: [{ ...VALID.findings[0], places: [] }] }), /findings\[0\]\.places needs at least 1/);
+});
+
+test('a malformed submission is sent back with the reason, and the corrected one is returned', async () => {
+  const p = fakeProvider([
+    { stop: 'tool', toolCalls: [{ id: 's1', name: 'submit_findings', input: { ...VALID, findings: JSON.stringify(VALID.findings) } }] },
+    { stop: 'tool', toolCalls: [{ id: 's2', name: 'submit_findings', input: VALID }] },
+  ]);
+  const out = await runAgent({ provider: p, system: 's', prompt: 'go', tools: treeTools(tmpTree({ a: '' })), submit: SUBMIT_FINDINGS, meter: new CostMeter({}) });
+  assert.deepEqual(out, VALID);
+  const [back] = p.calls[1].content;
+  assert.equal(back.id, 's1');
+  assert.equal(back.isError, true);
+  assert.match(back.output, /findings must be an array/);
+});
+
+test('an agent that submits a malformed answer twice fails cleanly, not later downstream', async () => {
+  const bad = { stop: 'tool', toolCalls: [{ id: 's', name: 'submit_findings', input: { findings: 'oops', current_bugs: [] } }] };
+  await assert.rejects(
+    runAgent({ provider: fakeProvider([bad, bad]), system: 's', prompt: 'go', tools: treeTools(tmpTree({ a: '' })), submit: SUBMIT_FINDINGS, meter: new CostMeter({}) }),
+    (err) => err instanceof AgentError && /malformed answer/.test(err.message),
+  );
+});

@@ -6,7 +6,7 @@ const path = require('node:path');
 
 const { splitAreas, keyOf, CONFIG_AREA, REST_AREA } = require('../../agents/oracle/areas');
 const { fingerprint, placeFile } = require('../../agents/oracle/fingerprint');
-const { runOracle, mergeGroups } = require('../../agents/oracle/pipeline');
+const { runOracle, mergeGroups, changeCounts } = require('../../agents/oracle/pipeline');
 const { renderReport } = require('../../agents/oracle/report');
 const { CostMeter } = require('../../agents/_shared/cost');
 
@@ -314,7 +314,7 @@ test('against the previous run: found again keeps its id, unchanged is carried, 
   const status = Object.fromEntries(changes.earlier.map((e) => [e.id, e.status]));
   assert.deepEqual(status, { keep1: 'still_open', carry1: 'still_open', gone1: 'fixed' });
   assert.equal(provider.calls.recheck, 1, 'only the finding whose files changed is re-checked');
-  assert.deepEqual(run.changes, { new: 0, still_open: 2, merged: 0, fixed: 1, guarded: 0, broke: 0, open: 2 });
+  assert.deepEqual(run.changes, { new: 0, split: 0, still_open: 2, merged: 0, fixed: 1, guarded: 0, broke: 0, open: 2 });
   assert.deepEqual([...changes.issued_ids].sort(), ['carry1', 'gone1', 'keep1'], 'closed ids stay reserved');
   const report = fs.readFileSync(path.join(runDir, 'report.md'), 'utf8');
   assert.match(report, /## Since the previous run/);
@@ -348,4 +348,11 @@ test('when what changed is unknown, unmatched findings are re-checked, not assum
   const { provider, runDir } = await runWithPrevious({}, { changed: null });
   assert.equal(provider.calls.recheck, 1);
   assert.deepEqual(readRun(runDir, 'changes.json').carried.map((c) => c.id).sort(), ['carry1', 'gone1']);
+});
+
+test('a split (a known finding reported in finer pieces) is counted apart from new', () => {
+  const counts = changeCounts([{ change: 'new' }, { change: 'split' }, { change: 'split' }, { change: 'still_open' }], [], []);
+  assert.equal(counts.new, 1);
+  assert.equal(counts.split, 2);
+  assert.equal(counts.open, 4);
 });

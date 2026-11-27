@@ -62,6 +62,8 @@ function ingestBodyParser() {
 const CRITERIA_IDS = criteriaIds();
 const CRITERIA_SLUGS = criteriaSlugs();
 
+const { handleAgentRunIngest, insertAgentRun, fetchAgentRuns } = require('./db/agent-runs');
+
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -81,6 +83,9 @@ function pgProvider() {
       const rows = await fetchFindingsRows(getPool(), systemKey);
       const dates = rows.findings.map((f) => f.generated_at).filter(Boolean).sort();
       return rowsToFindings(rows, systemKey, { generatedAt: dates[dates.length - 1] || today() });
+    },
+    async getAgentRuns() {
+      return fetchAgentRuns(getPool());
     },
     async getHistory() {
       const rows = await fetchHistoryRows(getPool());
@@ -108,6 +113,7 @@ function createApp(deps = {}) {
   const ingest = deps.ingest
     || ((deps.verifier && deps.allowlist) ? { enabled: true } : ingestConfig());
   const write = deps.write || ((rows) => replaceSystem(getPool(), rows));
+  const writeAgentRun = deps.writeAgentRun || ((row) => insertAgentRun(getPool(), row));
   const alerts = deps.alert ? { enabled: true } : alertsConfig();
   const readCurrent = deps.readCurrent || (alerts.enabled ? (key) => fetchCurrentReading(getPool(), key) : null);
   const alert = deps.alert
@@ -135,8 +141,12 @@ function createApp(deps = {}) {
       handleIngest(req, res, {
         verifier, allowlist, knownCriteria: CRITERIA_IDS, write, readCurrent, alert,
       }));
+    // What the fleet's agents report, beside the scores rather than in them:
+    // same token and allowlist, its own table, never a full replace.
+    app.post('/ingest/agent-run', express.json({ limit: '64kb' }), (req, res) =>
+      handleAgentRunIngest(req, res, { verifier, allowlist, writeAgentRun }));
   } else {
-    app.post('/ingest', (req, res) => res.status(503).json({
+    app.post(['/ingest', '/ingest/agent-run'], (req, res) => res.status(503).json({
       error: 'ingest is not configured on this installation',
       detail: ingest.reason,
     }));
@@ -168,6 +178,11 @@ function createApp(deps = {}) {
   // stands and never whether it was moving.
   app.get('/data/history.json', async (req, res, next) => {
     try { res.json(await provider.getHistory()); } catch (err) { next(err); }
+  });
+
+  // A provider without agent runs (an older one, or a test double) serves none.
+  app.get('/data/agent-runs.json', async (req, res, next) => {
+    try { res.json(provider.getAgentRuns ? await provider.getAgentRuns() : { runs: [] }); } catch (err) { next(err); }
   });
 
   app.use(express.static(PUBLIC));
