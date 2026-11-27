@@ -20,6 +20,8 @@
  * A run that hit the cap and also failed exits 1: failed outranks the cap.
  */
 
+const fs = require('node:fs');
+const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const engine = require('../../scripts/benchmark/engine-config');
 const { materialise } = require('../../scripts/benchmark/target-tree');
@@ -31,6 +33,13 @@ const { runOracle } = require('./pipeline');
 const { loadPreviousOpen, changedFiles } = require('./compare');
 
 const EXIT = { complete: 0, failed: 1, incomplete: 2 };
+
+// agent.json and prompts/ sit beside this file in the source tree, and in
+// dist/oracle/ beside the bundle (dist/oracle.js), which runs with __dirname = dist.
+function resolveAgentDir(dir) {
+  return fs.existsSync(path.join(dir, 'agent.json')) ? dir : path.join(dir, 'oracle');
+}
+const AGENT_DIR = resolveAgentDir(__dirname);
 
 function argValue(name) {
   const i = process.argv.indexOf(`--${name}`);
@@ -51,7 +60,7 @@ async function main() {
   if (!systemKey) throw new Error('Name a system: --system <name> (a key from the watchtower config).');
 
   loadDotEnv();
-  const { settings, defaults } = agentSettings('oracle', systemKey, { agentDir: __dirname });
+  const { settings, defaults } = agentSettings('oracle', systemKey, { agentDir: AGENT_DIR });
   const meter = new CostMeter({ prices: settings.prices, capUsd: settings.max_cost_usd, model: settings.model });
   meter.requirePrice(settings.model);
   const provider = createProvider(settings);
@@ -71,7 +80,7 @@ async function main() {
       systemKey,
       settings,
       defaults,
-      agentDir: __dirname,
+      agentDir: AGENT_DIR,
       provider,
       treeDir: tree.dir,
       runDir,
@@ -100,4 +109,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { main };
+module.exports = { main, resolveAgentDir };
