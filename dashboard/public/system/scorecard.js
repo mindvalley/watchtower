@@ -290,6 +290,16 @@ async function initScorecard(systemKey) {
   const sys = (data.systems || {})[systemKey] || {};
   const crit = sys.criteria || {};
 
+  // Oracle's latest run for this system, if it has one. Fetched on its own and
+  // allowed to fail: the scorecard never waits on, or breaks for, the agents.
+  fetch('/data/agent-runs.json').then((r) => (r.ok ? r.json() : null)).catch(() => null).then((feed) => {
+    const panel = AgentImpact.systemPanel(feed && feed.runs, systemKey);
+    const section = document.getElementById('oracle-section');
+    if (!panel || !section) return;
+    document.getElementById('oracle-panel').innerHTML = AgentImpact.systemPanelHtml(panel, escHtml);
+    section.style.display = '';
+  });
+
   // Header badge: composite + hard-cap note.
   const badge = document.getElementById('score-badge');
   if (sys.score != null) {
