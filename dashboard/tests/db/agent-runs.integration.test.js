@@ -14,7 +14,7 @@ const RUN = (over = {}) => ({
   system_key: 'alpha', agent: 'oracle', run: '2026-11-27-0701', finished_at: '2026-11-27T07:24:10.000Z',
   commit: 'be8ce5ed57947809869c70d03d8e92992b14f95a', status: 'complete', model: 'claude-sonnet-5-5',
   compared: true, previous_run: '2026-11-17-0312',
-  counts: { open: 97, new: 12, still_open: 85, fixed: 3, guarded: 1, broke: 2, merged: 4, current_bugs: 20, security_bugs: 3 },
+  counts: { open: 97, new: 12, refined: 5, still_open: 85, fixed: 3, guarded: 1, broke: 2, merged: 4, current_bugs: 20, security_bugs: 3 },
   cost_usd: 19.84, run_url: 'https://github.com/org/watchtower/tree/oracle-runs/oracle/alpha/2026-11-27-0701',
   published_by: 'org/watchtower', ...over,
 });

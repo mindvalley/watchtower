@@ -1381,7 +1381,9 @@ const CLOSED = ['fixed', 'guarded', 'broke'];
 function changeCounts(current, earlier, carried) {
   const n = (list, key, value) => list.filter((x) => x[key] === value).length;
   return {
-    new: n(current, 'change', 'new') + n(current, 'change', 'split'),
+    new: n(current, 'change', 'new'),
+    // A known finding reported in finer pieces: not news, so not counted as new.
+    split: n(current, 'change', 'split'),
     still_open: n(earlier, 'status', 'still_open'),
     merged: n(earlier, 'status', 'merged'),
     fixed: n(earlier, 'status', 'fixed'),
@@ -1642,7 +1644,9 @@ async function runOracle({
   return run;
 }
 
-module.exports = { runOracle, mergeGroups, dedupeBugs, score };
+module.exports = {
+  runOracle, mergeGroups, dedupeBugs, score, changeCounts,
+};
 
 
 /***/ }),

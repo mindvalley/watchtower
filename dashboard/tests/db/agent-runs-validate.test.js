@@ -15,7 +15,7 @@ const GOOD = {
   compared: true,
   previous_run: '2026-11-17-0312',
   counts: {
-    open: 97, new: 12, still_open: 85, fixed: 3, guarded: 1, broke: 2, merged: 4, current_bugs: 20, security_bugs: 3,
+    open: 97, new: 12, refined: 5, still_open: 85, fixed: 3, guarded: 1, broke: 2, merged: 4, current_bugs: 20, security_bugs: 3,
   },
   cost_usd: 19.84,
   run_url: 'https://github.com/some-org/watchtower/tree/oracle-runs/oracle/alpha/2026-11-27-0701',
@@ -37,6 +37,8 @@ test('only counts are accepted — any field it does not know, such as finding t
 test('every count is required and must be a whole number of zero or more', () => {
   const { broke, ...missing } = GOOD.counts;
   assert.match(validateAgentRun({ ...GOOD, counts: missing }).reason, /counts\.broke/);
+  const { refined, ...noRefined } = GOOD.counts;
+  assert.match(validateAgentRun({ ...GOOD, counts: noRefined }).reason, /counts\.refined/);
   assert.match(validateAgentRun({ ...GOOD, counts: { ...GOOD.counts, fixed: -1 } }).reason, /counts\.fixed/);
   assert.match(validateAgentRun({ ...GOOD, counts: { ...GOOD.counts, fixed: 1.5 } }).reason, /counts\.fixed/);
 });

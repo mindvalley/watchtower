@@ -12,7 +12,7 @@ const allowlist = { resolve: (r, s) => (r === REPO && s === 'alpha' ? { system_k
 const BODY = {
   system_key: 'alpha', agent: 'oracle', run: '2026-11-27-0701', finished_at: '2026-11-27T07:24:10.000Z',
   commit: null, status: 'complete', model: 'claude-sonnet-5-5', compared: false, previous_run: null,
-  counts: { open: 5, new: 5, still_open: 0, fixed: 0, guarded: 0, broke: 0, merged: 0, current_bugs: 1, security_bugs: 0 },
+  counts: { open: 5, new: 5, refined: 0, still_open: 0, fixed: 0, guarded: 0, broke: 0, merged: 0, current_bugs: 1, security_bugs: 0 },
   cost_usd: 18.5, run_url: 'https://github.com/some-org/watchtower/tree/oracle-runs/oracle/alpha/2026-11-27-0701',
 };
 

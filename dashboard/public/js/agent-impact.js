@@ -50,6 +50,8 @@ function fleetSummary(runs, keys, { now = new Date().toISOString(), days = 28 } 
     if (!latestFinished || last.finished_at > latestFinished) latestFinished = last.finished_at;
     for (const r of mine) {
       if (Date.parse(r.finished_at) < since) continue;
+      // A system's first run sets its baseline; its findings are not news.
+      if (!r.compared) continue;
       closed += r.counts.fixed + r.counts.guarded;
       broke += r.counts.broke;
       newFindings += r.counts.new;
@@ -95,7 +97,7 @@ function systemPanelHtml(panel, esc) {
     </div>
     ${changes}
     <div style="margin-top:14px;font-size:var(--fs-xs);color:var(--text-muted)">
-      ${esc(c.current_bugs)} current bugs (${esc(c.security_bugs)} security) · Oracle run ${esc(when)}${r.status === 'complete' ? '' : ` · ${esc(r.status)}`}
+      ${r.compared && c.refined ? `${esc(c.refined)} refined (known findings reported in finer detail) · ` : ''}${esc(c.current_bugs)} current bugs (${esc(c.security_bugs)} security) · Oracle run ${esc(when)}${r.status === 'complete' ? '' : ` · ${esc(r.status)}`}
       · <a href="${esc(r.run_url)}" style="color:var(--accent)">Full report →</a>
     </div>`;
 }
@@ -107,7 +109,7 @@ function fleetSummaryHtml(s, esc) {
       ${stat(s.open, `hidden agreements open across ${s.systems} system${s.systems === 1 ? '' : 's'}`, esc)}
       ${stat(s.closed, `fixed or guarded since Oracle found them (last ${s.days} days)`, esc)}
       ${stat(s.broke, `broke as Oracle predicted (last ${s.days} days)`, esc)}
-      ${stat(s.newFindings, `new findings (last ${s.days} days)`, esc)}
+      ${stat(s.newFindings, `new findings since each system's first run (last ${s.days} days)`, esc)}
     </div>
     <div style="margin-top:10px;font-size:var(--fs-xs);color:var(--text-muted)">Latest Oracle run ${esc(String(s.latestFinished).slice(0, 10))}. Counts only — each system's page links to its full report.</div>`;
 }

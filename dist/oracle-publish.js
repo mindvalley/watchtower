@@ -37,6 +37,11 @@ function buildAgentRunPayload({ runDir, systemKey, runUrlBase }) {
   const changes = readJson(changesFile);
   const c = changes.counts;
   const name = path.basename(runDir);
+  // Folders written before splits were counted apart counted them in `new`;
+  // recount both from the per-finding changes those folders also hold.
+  const perFinding = (kind) => (changes.current || []).filter((f) => f.change === kind).length;
+  const split = c.split ?? perFinding('split');
+  const fresh = c.split === undefined ? perFinding('new') : c.new;
   return {
     system_key: systemKey,
     agent: 'oracle',
@@ -49,7 +54,8 @@ function buildAgentRunPayload({ runDir, systemKey, runUrlBase }) {
     previous_run: changes.previous ? changes.previous.run : null,
     counts: {
       open: c.open,
-      new: c.new,
+      new: fresh,
+      refined: split,
       still_open: c.still_open,
       fixed: c.fixed,
       guarded: c.guarded,

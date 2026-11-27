@@ -13,7 +13,7 @@
 
 const AGENTS = new Set(['oracle']);
 const STATUSES = new Set(['complete', 'incomplete', 'failed']);
-const COUNTS = ['open', 'new', 'still_open', 'fixed', 'guarded', 'broke', 'merged', 'current_bugs', 'security_bugs'];
+const COUNTS = ['open', 'new', 'refined', 'still_open', 'fixed', 'guarded', 'broke', 'merged', 'current_bugs', 'security_bugs'];
 const FIELDS = new Set(['system_key', 'agent', 'run', 'finished_at', 'commit', 'status', 'model',
   'compared', 'previous_run', 'counts', 'cost_usd', 'run_url']);
 const RUN_NAME = /^\d{4}-\d\d-\d\d-\d{4}(-\d+)?$/;

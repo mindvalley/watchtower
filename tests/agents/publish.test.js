@@ -16,7 +16,7 @@ const RUN = {
   agent: 'oracle', system: 'alpha', status: 'complete', commit: 'be8ce5ed57947809869c70d03d8e92992b14f95a',
   finished_at: '2026-11-27T07:24:10.123Z', model: 'claude-sonnet-5-5',
   counts: { raw_findings: 120, findings: 97, confirmed: 39, rejected: 1, current_bugs: 20, security_bugs: 3 },
-  changes: { new: 12, still_open: 85, merged: 4, fixed: 3, guarded: 1, broke: 2, open: 97 },
+  changes: { new: 12, split: 5, still_open: 85, merged: 4, fixed: 3, guarded: 1, broke: 2, open: 97 },
   cost: { usd: 19.8412, calls: 300 },
 };
 const CHANGES = { compared: true, previous: { run: '2026-11-17-0312', commit: 'aaa' }, counts: RUN.changes };
@@ -27,7 +27,7 @@ test('the payload is the run\'s counts and a link, nothing a finding says', () =
   assert.deepStrictEqual(p, {
     system_key: 'alpha', agent: 'oracle', run: '2026-11-27-0701', finished_at: '2026-11-27T07:24:10.123Z',
     commit: RUN.commit, status: 'complete', model: 'claude-sonnet-5-5', compared: true, previous_run: '2026-11-17-0312',
-    counts: { open: 97, new: 12, still_open: 85, fixed: 3, guarded: 1, broke: 2, merged: 4, current_bugs: 20, security_bugs: 3 },
+    counts: { open: 97, new: 12, refined: 5, still_open: 85, fixed: 3, guarded: 1, broke: 2, merged: 4, current_bugs: 20, security_bugs: 3 },
     cost_usd: 19.84, run_url: `${BASE}/alpha/2026-11-27-0701`,
   });
 });
@@ -61,4 +61,15 @@ test('posting sends both tokens to /ingest/agent-run and reports a refusal with 
   assert.equal(sent[0].init.headers['X-Benchmark-Ingest-Token'], 'oidc');
   const refuse = async () => ({ status: 400, text: async () => '{"reason":"unknown field"}' });
   await assert.rejects(postAgentRun({ url: 'https://board', iapToken: 'i', ingestToken: 'o', payload: {}, fetchImpl: refuse }), /HTTP 400.*unknown field/);
+});
+
+test('a run folder from before splits were counted apart is recounted from its per-finding changes', () => {
+  const old = {
+    ...CHANGES,
+    counts: { new: 3, still_open: 85, merged: 4, fixed: 3, guarded: 1, broke: 2, open: 97 }, // new included the split
+    current: [{ id: 'a', change: 'new' }, { id: 'b', change: 'new' }, { id: 'c', change: 'split', split_from: 'x' }, { id: 'd', change: 'still_open' }],
+  };
+  const p = buildAgentRunPayload({ runDir: runFolder({ run: RUN, changes: old }), systemKey: 'alpha', runUrlBase: BASE });
+  assert.equal(p.counts.new, 2);
+  assert.equal(p.counts.refined, 1);
 });
