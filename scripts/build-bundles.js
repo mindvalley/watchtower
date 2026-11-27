@@ -9,8 +9,10 @@ const DIST_DIR = path.join(__dirname, '..', 'dist');
 const AGENTS_DIR = path.join(__dirname, '..', 'agents');
 
 // Fleet agents bundled as dist/<name>.js. Each reads its defaults and prompts at
-// run time, so those are copied to dist/<name>/ (see agentAssets).
+// run time, so those are copied to dist/<name>/ (see agentAssets). An agent may
+// ship further programs beside its run.js, bundled as dist/<name>-<program>.js.
 const AGENTS = ['oracle'];
+const AGENT_PROGRAMS = { oracle: ['publish'] };
 
 function isProgram(source) {
   return source.startsWith('#!') || /require\.main\s*===\s*module/.test(source);
@@ -30,11 +32,18 @@ function bundleTargets() {
       source: path.join(PROGRAM_DIR, program),
       bundle: path.join(DIST_DIR, program),
     })),
-    ...AGENTS.map((name) => ({
-      program: `${name}.js`,
-      source: path.join(AGENTS_DIR, name, 'run.js'),
-      bundle: path.join(DIST_DIR, `${name}.js`),
-    })),
+    ...AGENTS.flatMap((name) => [
+      {
+        program: `${name}.js`,
+        source: path.join(AGENTS_DIR, name, 'run.js'),
+        bundle: path.join(DIST_DIR, `${name}.js`),
+      },
+      ...(AGENT_PROGRAMS[name] || []).map((extra) => ({
+        program: `${name}-${extra}.js`,
+        source: path.join(AGENTS_DIR, name, `${extra}.js`),
+        bundle: path.join(DIST_DIR, `${name}-${extra}.js`),
+      })),
+    ]),
   ];
 }
 

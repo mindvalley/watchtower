@@ -80,3 +80,10 @@ test('the Oracle bundle loads and runs on its own, without node_modules', () => 
   assert.ok(err, 'expected a non-zero exit without --system');
   assert.match(err.stderr, /Name a system/);
 });
+
+test('Oracle\'s publish step is bundled as dist/oracle-publish.js', () => {
+  const target = bundleTargets().find((t) => t.program === 'oracle-publish.js');
+  assert.ok(target, 'no oracle-publish.js bundle target');
+  assert.match(target.source, /agents\/oracle\/publish\.js$/);
+  assert.ok(fs.existsSync(target.bundle), 'dist/oracle-publish.js is missing — run npm run build');
+});
